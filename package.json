@@ -2,14 +2,9 @@
   "name": "plantera",
   "version": "0.0.2",
   "description": "",
-  "exports": {
-    ".": {
-      "types": "./dist.index.d.ts",
-      "require": "./dist/index.js",
-      "import": "./dist/index.mjs",
-      "default": "./dist/index.mjs"
-    }
-  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist.index.d.ts",
   "files": [
     "dist"
   ],
