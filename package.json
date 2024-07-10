@@ -1,18 +1,29 @@
 {
-  "name": "effector-ws",
+  "name": "plantera",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist.index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsup"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "effector": "^23.2.2"
+    "effector": "^23.2.2",
+    "lodash": "^4.17.21",
+    "path-to-regexp": "^7.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.14.9"
+    "@types/lodash": "^4.17.6",
+    "@types/node": "^20.14.9",
+    "tsup": "^8.1.0",
+    "typescript": "^5.5.3"
   }
 }
