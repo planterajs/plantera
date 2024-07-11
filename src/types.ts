@@ -19,6 +19,7 @@ export type RequestContext<
 };
 
 export type HttpMethod =
+    | "UNSPECIFIED"
     | "GET"
     | "POST"
     | "PUT"
