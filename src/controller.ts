@@ -1,6 +1,20 @@
 import { MaybePromise, RequestContext } from "./types";
 import { createEffect } from "effector/compat";
 
+/**
+ * Creates a controller middleware that executes a given function and sends the result
+ * as an HTTP response. The function can be mapped from the context, and the response
+ * is automatically formatted based on the function's return value.
+ *
+ * ```ts
+ * const getUserController = controller(async (params) => {
+ *   const user = await getUserFromDatabase(params.id);
+ *   return user;
+ * }, (context) => ({ id: context.req.params.id }));
+ *
+ * composed.use(route('GET', '/user/:id', getUserController));
+ * ```
+ */
 export function controller<Context extends RequestContext, Params, Done>(
     fn: (params: Params) => MaybePromise<Done>,
     ...map: [Params, Context] extends [void, any] | [any, Params]
