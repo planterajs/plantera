@@ -4,10 +4,16 @@
   "description": "",
   "exports": {
     ".": {
-      "types": "./dist.index.d.ts",
+      "types": "./dist/index.d.ts",
       "require": "./dist/index.js",
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
+    },
+    "./middlewares": {
+      "types": "./dist/middlewares/index.d.ts",
+      "require": "./dist/middlewares/index.js",
+      "import": "./dist/middlewares/index.mjs",
+      "default": "./dist/middlewares/index.mjs"
     }
   },
   "files": [
