@@ -1,7 +1,7 @@
 import { HttpMethod, MaybeArray, RequestContext } from "./types";
-import { compose, Composed, MiddlewareLike } from "./core/middleware";
+import { compose, Composed, MiddlewareLike } from "./core";
 import { IncomingMessage, ServerResponse } from "http";
-import { query, route } from "./middlewares";
+import { query, route, prefix } from "./middlewares";
 import { HttpMethods } from "./constants";
 
 export type RouterApi<Context> = {
@@ -10,7 +10,32 @@ export type RouterApi<Context> = {
      */
     callback: (req: IncomingMessage, res: ServerResponse) => Promise<Context>;
     /**
-     * Defines a route for the specified path.
+     * Defines a prefix for nested routes.
+     * ```ts
+     * const usersRoute = router.prefix("/users");
+     * usersRoute.get(":id", ...); // GET /users/:id
+     * ```
+     */
+    prefix: (path: string, nesting?: boolean) => Router<Context>;
+    /**
+     * Registers a new route.
+     * ```ts
+     * router.route("GET", "/:id", ...); // GET /:id
+     * ```
+     *
+     * This middleware sets the metadata of the current route, which allows
+     * inherited routes to use its path, allowing the creation of nested routes.
+     * ```ts
+     * route
+     *     .route("GET", "/users", ...) // GET /users
+     *     .route("GET", "/:id", ...) // GET /users/:id
+     * ```
+     *
+     * If the route isn't matched, the chain continues to be executed further
+     * along nested routes or other middlewares.
+     *
+     * Note: There is no need to use this method explicitly; there are macros
+     * for methods for this.
      */
     route: (
         path: string,
@@ -26,29 +51,47 @@ export type RouterApi<Context> = {
 export type Router<Context> = Composed<Context> & RouterApi<Context>;
 
 /**
- * Creates a router with middleware capabilities for handling HTTP requests.
+ * Creates a new router. It extends the basic middleware interface, allowing
+ * to install custom middleware and define control flow.
  *
- * The router allows defining routes with HTTP methods and provides a callback
- * function for handling incoming requests. It also supports nesting, enabling
- * complex routing hierarchies.
- *
+ * Basic usage:
  * ```ts
  * const router = createRouter();
  *
- * router.get('/users', getUsersMiddleware);
- * router.post('/users', createUserMiddleware);
+ * router.get("/hello", controller(() => "hello, plantera!");
  *
- * // Nested routes
- * const userRouter = createRouter();
- * userRouter.get('/:id', getUserByIdMiddleware);
- * userRouter.put('/:id', updateUserMiddleware);
- * router.route('/users', userRouter);
+ * createServer(router.callback).listen(3000);
+ * ```
  *
- * // Handling requests
- * const server = http.createServer((req, res) => {
- *   router.callback(req, res);
- * });
- * server.listen(3000);
+ * Using custom middlewares:
+ * ```ts
+ * router.use(customMiddlewareA, customMiddlewareB, ...);
+ * ```
+ *
+ * Using basic routes:
+ * ```ts
+ * router.get("/users", getAllUsers); // GET /users
+ * ```
+ *
+ * Using nested routes:
+ * ```ts
+ * router
+ *     .get("/users", getAllUsers); // GET /users
+ *     .get("/:id", getUser); // GET /users/:id
+ * ```
+ *
+ * External router:
+ * ```ts
+ * // With chaining
+ * const userRouter = createRouter()
+ *     .get("/users", getAllUsers); // GET /users
+ *     .get("/:id", getUser); // GET /users/:id
+ * // Or with prefix
+ * const userRouter = createRouter().prefix("/users")
+ *     .get("/", getAllUsers); // GET /users
+ *     .get("/:id", getUser); // GET /users/:id
+ *
+ * router.use(userRouter);
  * ```
  */
 export function createRouter<Context extends RequestContext>(
@@ -61,14 +104,27 @@ export function createRouter<Context extends RequestContext>(
         path: string,
         ...handlers: MaybeArray<MiddlewareLike<Context>>[]
     ) => {
-        middleware.use(route(method, path, ...handlers));
-
-        return createRouter(middleware);
+        return createRouter(middleware.fork(route(method, path, ...handlers)));
     };
 
     const api: RouterApi<Context> = {
         callback(req, res) {
-            return middleware({ req, res } as Context);
+            const sendApi = {
+                sent: false,
+                send(...args: any[]) {
+                    if (!this.sent) res.end(...args);
+                    this.sent = true;
+                },
+            };
+            const context = {
+                req,
+                res: Object.assign(res, sendApi),
+            };
+
+            return middleware(context as Context);
+        },
+        prefix(path, nesting = true) {
+            return createRouter(middleware.fork(prefix(path, nesting)));
         },
         route(path, ...handlers) {
             return useRoute(HttpMethods.Unspecified, path, ...handlers);
