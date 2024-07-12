@@ -25,18 +25,18 @@ export function controller<Context extends RequestContext, Params, Done>(
         try {
             const value = await fn(map[0] ? (map[0](context) as any) : context);
 
-            if (!context.res.headersSent) {
+            if (!context.res.headersSent && !context.res.sent) {
                 context.res.statusCode = 200;
 
                 if (value instanceof Object) {
                     context.res.setHeader("Content-Type", "application/json");
-                    context.res.end(JSON.stringify(value));
+                    context.res.send(JSON.stringify(value));
                 } else {
-                    context.res.end(value);
+                    context.res.send(value);
                 }
             }
         } catch (error) {
-            if (!context.res.headersSent) {
+            if (!context.res.headersSent && !context.res.sent) {
                 context.res.statusCode = 400;
 
                 const responseError =
@@ -53,7 +53,7 @@ export function controller<Context extends RequestContext, Params, Done>(
                           };
 
                 context.res.setHeader("Content-Type", "application/json");
-                context.res.end(responseError);
+                context.res.send(responseError);
             }
         }
     });
