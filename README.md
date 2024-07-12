@@ -8,11 +8,11 @@
 > This is a experimental project in the proof of concept stage. While this warning is here, the code is not ready for production.
 
 # Why?
-This project is an attempt to prove that the [effector](effector.dev) can be used as a base of backend framework.
+This project is an attempt to prove that the [effector](https://effector.dev) can be used as a base of backend framework.
 
 # Getting started
 
-Install the package using your favorite package manager. For example: [npm](npmjs.com), [pnpm](pnpm.io), [yarn](yarnpkg.com) or [bun](bun.sh/guides/install/add).
+Install the package using your favorite package manager. For example: [npm](https://npmjs.com), [pnpm](https://pnpm.io), [yarn](https://yarnpkg.com) or [bun](https://bun.sh/guides/install/add).
 ```bash
 npm install plantera
 ```
@@ -148,7 +148,7 @@ router.use(userRouter);
 
 # Middlewares
 
-The middleware system is based on [effector](effector.dev) API and provides methods for composing and executing middleware chains.
+The middleware system is based on [effector](https://effector.dev) API and provides methods for composing and executing middleware chains.
 
 ### compose()
 Composes middlewares into one chain.
@@ -258,5 +258,5 @@ composed.branch(
 This method combines all match and mismatch middlewares into one chain respectively and doesn't return any further interface due to branching mechanics.
 
 # Links
-- [Package](npmjs.com/package/plantera)
-- [Effector](effector.dev)
+- [Package](https://npmjs.com/package/plantera)
+- [Effector](https://effector.dev)
