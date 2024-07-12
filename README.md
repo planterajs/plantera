@@ -246,7 +246,7 @@ This method combines all match and mismatch middlewares into one chain respectiv
 Splits the middleware execution based on a predicate, similar to `branch`, but utilizes an event-driven approach to handle the execution paths.
 
 ```ts
-composed.branch(
+composed.split(
   predicate,
   [trueMiddleware],
   [falseMiddleware]
