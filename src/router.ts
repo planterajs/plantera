@@ -18,24 +18,12 @@ export type RouterApi<Context> = {
      */
     prefix: (path: string, nesting?: boolean) => Router<Context>;
     /**
-     * Registers a new route.
+     * Defines a prefix for nested routes and acts like an endpoint as well.
      * ```ts
-     * router.route("GET", "/:id", ...); // GET /:id
+     * router
+     *     .route("/users", allUsers)
+     *     .get("/:id", getUser);
      * ```
-     *
-     * This middleware sets the metadata of the current route, which allows
-     * inherited routes to use its path, allowing the creation of nested routes.
-     * ```ts
-     * route
-     *     .route("GET", "/users", ...) // GET /users
-     *     .route("GET", "/:id", ...) // GET /users/:id
-     * ```
-     *
-     * If the route isn't matched, the chain continues to be executed further
-     * along nested routes or other middlewares.
-     *
-     * Note: There is no need to use this method explicitly; there are macros
-     * for methods for this.
      */
     route: (
         path: string,

@@ -49,7 +49,7 @@ export function route<Context extends RequestContext>(
 /**
  * Sets base path for nested routes.
  * ```ts
- * const usersRoute = router.prefix("/users");
+ * const usersRoute = router.use(prefix("/users"));
  * usersRoute.get(":id", ...); // GET /users/:id
  * ```
  */

@@ -136,9 +136,7 @@ export type ComposedApi<Context> = Chain<Context> & {
     ) => Composed<Context>[];
 
     /**
-     * Branches the middleware execution based on a predicate. If the predicate
-     * returns true, the `matchMiddlewares` will be executed. Otherwise, the
-     * `mismatchMiddlewares` will be executed.
+     * Branches the middleware execution based on a predicate.
      *
      * ```ts
      * composed.branch(
@@ -162,9 +160,7 @@ export type ComposedApi<Context> = Chain<Context> & {
 
     /**
      * Splits the middleware execution based on a predicate, similar to `branch`, but
-     * utilizes an event-driven approach to handle the execution paths. If the predicate
-     * returns true, the `matchMiddlewares` will be executed. Otherwise, the
-     * `mismatchMiddlewares` will be executed.
+     * utilizes an event-driven approach to handle the execution paths.
      *
      * ```ts
      * composed.branch(
@@ -228,14 +224,14 @@ function extractContext<Context>(effectDone: MiddlewareEffectDone<Context>) {
  *
  * A chain of middleware will be successfully executed if the first and last
  * effects are connected directly or indirectly by a sample or split.
- * ```js
+ * ```ts
  * const a = createEffect(...);
  * const b = createEffect(...);
  * const с = createEffect(...);
  *
  * execute(a, c, ...); // This won't run
  * ```
- * ```js
+ * ```ts
  * compose(a, b, c);
  *
  * execute(a, c, ...); // This will run
@@ -243,7 +239,7 @@ function extractContext<Context>(effectDone: MiddlewareEffectDone<Context>) {
  *
  * If one of the chain's effects throws an exception, execution will be aborted
  * because the done event will not be sent.
- * ```js
+ * ```ts
  * const a = createEffect(() => { throw "abort" });
  * const b = createEffect(...);
  *
@@ -251,7 +247,7 @@ function extractContext<Context>(effectDone: MiddlewareEffectDone<Context>) {
  *
  * execute(a, b, ...); // This won't run
  * ```
- * ```js
+ * ```ts
  * const a = createEffect(() => { if (condition) throw "abort" });
  * const b = createEffect(...);
  *
@@ -276,18 +272,18 @@ export function execute<Context>(
  *
  * The function accepts any middleware that matches the shape of the middleware,
  * be it a function, effect, or other composed. It also accepts array chunks.
- * ```js
+ * ```ts
  * // This is valid input
  * compose(function, effect, composed, [function], [effect, composed]);
  * ```
  *
- * If you want to include another composite, do not try to pass its chain fields,
+ * If you want to include another composed, do not try to pass its chain fields,
  * this may lead to unpredictable behavior.
- * ```js
+ * ```ts
  * // Good
  * compose(..., composed, ...);
  * ```
- * ```js
+ * ```ts
  * // Unsafe!
  * compose(composed.first);
  * compose(composed.last);
