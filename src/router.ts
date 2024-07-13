@@ -5,6 +5,14 @@ import { query, route, prefix } from "./middlewares";
 import { HttpMethods } from "./constants";
 import { createContext, RequestContext } from "./context";
 
+type MethodMacros<Context> = Record<
+    Lowercase<Exclude<HttpMethod, "UNSPECIFIED">>,
+    (
+        path: string,
+        ...handlers: MaybeArray<MiddlewareLike<Context>>[]
+    ) => Router<Context>
+>;
+
 export type RouterApi<Context> = {
     /**
      * Callback function to handle incoming HTTP requests.
@@ -32,13 +40,8 @@ export type RouterApi<Context> = {
         path: string,
         ...handlers: MaybeArray<MiddlewareLike<Context>>[]
     ) => Router<Context>;
-} & Record<
-    Lowercase<Exclude<HttpMethod, "UNSPECIFIED">>,
-    (
-        path: string,
-        ...handlers: MaybeArray<MiddlewareLike<Context>>[]
-    ) => Router<Context>
->;
+} & MethodMacros<Context>;
+
 export type Router<Context> = Composed<Context> & RouterApi<Context>;
 
 /**
@@ -98,6 +101,16 @@ export function createRouter<Context extends RequestContext>(
         return createRouter(middleware.fork(route(method, path, ...handlers)));
     };
 
+    const methodMacros = Object.fromEntries(
+        Object.values(HttpMethods).map((method) => [
+            method.toLowerCase(),
+            (
+                path: string,
+                ...handlers: MaybeArray<MiddlewareLike<Context>>[]
+            ) => useRoute(method, path, ...handlers),
+        ]),
+    ) as MethodMacros<Context>;
+
     const api: RouterApi<Context> = {
         callback(req, res) {
             return middleware(createContext(req, res) as Context);
@@ -108,27 +121,7 @@ export function createRouter<Context extends RequestContext>(
         route(path, ...handlers) {
             return useRoute(HttpMethods.Unspecified, path, ...handlers);
         },
-        get(path, ...handlers) {
-            return useRoute("GET", path, ...handlers);
-        },
-        post(path, ...handlers) {
-            return useRoute("POST", path, ...handlers);
-        },
-        put(path, ...handlers) {
-            return useRoute("PUT", path, ...handlers);
-        },
-        patch(path, ...handlers) {
-            return useRoute("PATCH", path, ...handlers);
-        },
-        delete(path, ...handlers) {
-            return useRoute("DELETE", path, ...handlers);
-        },
-        options(path, ...handlers) {
-            return useRoute("OPTIONS", path, ...handlers);
-        },
-        head(path, ...handlers) {
-            return useRoute("HEAD", path, ...handlers);
-        },
+        ...methodMacros
     };
 
     return Object.assign(middleware, api);
