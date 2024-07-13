@@ -40,30 +40,25 @@ export function createContext<T extends RequestContext>(
     return {
         route: createContextRouteMetadata(),
         req: createContextRequest(req),
-        res: new ResponseInterface(req, res),
+        res: createContextResponse(res),
     } as T;
 }
 
-class ResponseInterface extends ServerResponse implements Response {
-    public sent: boolean = false;
+function createContextResponse(res: ServerResponse): Response {
+    return Object.assign(res, {
+        sent: false,
+        send(data: any) {
+            if (!res.headersSent && !this.sent) {
+                const contentType = toContentType(data);
+                res.setHeader("Content-Type", contentType);
+                const responseBody = toResponseBody(data, contentType);
+                res.end(responseBody);
+            }
 
-    constructor(req: IncomingMessage, res: ServerResponse) {
-        super(req);
-        Object.assign(this, res);
-    }
-
-    public send(data: any) {
-        if (!this.headersSent && !this.sent) {
-            const contentType = toContentType(data);
-            this.setHeader("Content-Type", contentType);
-            const responseBody = toResponseBody(data, contentType);
-            this.end(responseBody);
-        }
-
-        this.sent = true;
-
-        return this;
-    }
+            this.sent = true;
+            return this;
+        },
+    }) as Response;
 }
 
 function createContextRouteMetadata(): RouteMetadata {
