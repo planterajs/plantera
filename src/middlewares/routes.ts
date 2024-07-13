@@ -1,8 +1,9 @@
-import { HttpMethod, MaybeArray, RequestContext } from "../types";
+import { HttpMethod, MaybeArray } from "../types";
 import { trimEnd } from "lodash";
 import { match, pathToRegexp } from "path-to-regexp";
 import { HttpMethods } from "../constants";
 import { compose, MiddlewareLike } from "../core";
+import { RequestContext } from "../context";
 
 /**
  * Registers a new route.
@@ -30,18 +31,15 @@ export function route<Context extends RequestContext>(
     pathTemplate: string,
     ...handlers: MaybeArray<MiddlewareLike<Context>>[]
 ) {
-    const initialHandlerChain = compose<Context>();
-    initialHandlerChain.filter(
-        [routeMethodPredicate(), routeUrlPredicate()],
-        ...handlers,
-    );
-
     const middleware = compose<Context>(
         routeMethodDecorator(method),
         routePathDecorator(pathTemplate),
-        routeParamsDecorator()
+        routeParamsDecorator(),
     );
-    middleware.fork(initialHandlerChain);
+    middleware.forkFilter(
+        [routeMethodPredicate(), routeUrlPredicate()],
+        ...handlers,
+    );
 
     return middleware;
 }
@@ -122,4 +120,3 @@ function routeUrlPredicate<Context extends RequestContext>() {
         return validate.exec(context.req.url || "") !== null;
     };
 }
-
