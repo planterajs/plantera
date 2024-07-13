@@ -1,4 +1,4 @@
-import { RequestContext } from "../types";
+import { RequestContext } from "../context";
 
 /**
  * Parses query parameters from the request URL and attach them to the

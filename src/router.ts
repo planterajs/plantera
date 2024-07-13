@@ -1,14 +1,16 @@
-import { HttpMethod, MaybeArray, RequestContext } from "./types";
+import { HttpMethod, MaybeArray } from "./types";
 import { compose, Composed, MiddlewareLike } from "./core";
 import { IncomingMessage, ServerResponse } from "http";
 import { query, route, prefix } from "./middlewares";
 import { HttpMethods } from "./constants";
+import { createContext, RequestContext } from "./context";
 
 export type RouterApi<Context> = {
     /**
      * Callback function to handle incoming HTTP requests.
      */
     callback: (req: IncomingMessage, res: ServerResponse) => Promise<Context>;
+
     /**
      * Defines a prefix for nested routes.
      * ```ts
@@ -17,6 +19,7 @@ export type RouterApi<Context> = {
      * ```
      */
     prefix: (path: string, nesting?: boolean) => Router<Context>;
+
     /**
      * Defines a prefix for nested routes and acts like an endpoint as well.
      * ```ts
@@ -97,19 +100,7 @@ export function createRouter<Context extends RequestContext>(
 
     const api: RouterApi<Context> = {
         callback(req, res) {
-            const sendApi = {
-                sent: false,
-                send(...args: any[]) {
-                    if (!this.sent) res.end(...args);
-                    this.sent = true;
-                },
-            };
-            const context = {
-                req,
-                res: Object.assign(res, sendApi),
-            };
-
-            return middleware(context as Context);
+            return middleware(createContext(req, res) as Context);
         },
         prefix(path, nesting = true) {
             return createRouter(middleware.fork(prefix(path, nesting)));
