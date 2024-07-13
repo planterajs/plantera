@@ -55,42 +55,6 @@ export type ExecuteFn<Context> = (context: Context) => Promise<Context>;
  */
 export type ComposedApi<Context> = Chain<Context> & {
     /**
-     * Concatenates/forwards passed middlewares to the current chain. After this
-     * method executed, the last effect of the current chain will be the last
-     * passed middleware.
-     * ```ts
-     * // "a" and "b" will be called sequentially after the previous chain.
-     * composed.use(a, b);
-     * ```
-     *
-     * This method combines all passed middleware into one chain and
-     * returns a new composed. The returned instance can be further extended
-     * and all changes will be regarded here.
-     */
-    use: (
-        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
-    ) => Composed<Context>;
-
-    /**
-     * Concatenates/forwards passed middlewares to the current chain with a
-     * filter attached. The following middleware will only be executed
-     * if the filter returns true.
-     * ```ts
-     * // "a" and "b" will be called sequentially after the previous chain
-     * // if the filter's predicate returns true.
-     * composed.filter(predicate, a, b);
-     * ```
-     *
-     * This method combines all passed middleware into one chain and
-     * returns a new composed. The returned instance can be further extended
-     * and all changes will be regarded here.
-     */
-    filter: (
-        predicate: MaybeArray<(context: Context) => boolean>,
-        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
-    ) => Composed<Context>;
-
-    /**
      * Concatenates/forwards passed middlewares to the current chain, but
      * without extending the current chain. This behaviour allows to add
      * concurrency in your middleware system.
@@ -134,6 +98,64 @@ export type ComposedApi<Context> = Chain<Context> & {
     forkEach: (
         ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
     ) => Composed<Context>[];
+
+    /**
+     * Concatenates/forwards passed middlewares to the current chain. After this
+     * method executed, the last effect of the current chain will be the last
+     * passed middleware.
+     * ```ts
+     * // "a" and "b" will be called sequentially after the previous chain.
+     * composed.use(a, b);
+     * ```
+     *
+     * This method combines all passed middleware into one chain and
+     * returns a new composed. The returned instance can be further extended
+     * and all changes will be regarded here.
+     */
+    use: (
+        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
+    ) => Composed<Context>;
+
+    /**
+     * Concatenates/forwards passed middlewares to the current chain, but
+     * only if the provided predicate returns true for the context.
+     * Similar to `fork` but with an additional filter.
+     * ```ts
+     * composed.use(a); // "a" will run first
+     * composed.forkFilter(context => context.type === 'foo', b); // "b" will run concurrently if context.type === 'foo'
+     * composed.use(c); // "c" will also be run second
+     * ```
+     *
+     * Like `fork`, this method doesn't extend the current chain, so
+     * the resulting value will not depend on forked middlewares.
+     *
+     * This method combines all passed middleware into one chain and
+     * returns a new composed. The returned instance can be further extended
+     * and all changes will be regarded here.
+     */
+    forkFilter: (
+        predicate: MaybeArray<(context: Context) => boolean>,
+        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
+    ) => Composed<Context>;
+
+    /**
+     * Concatenates/forwards passed middlewares to the current chain with a
+     * filter attached. The following middleware will only be executed
+     * if the filter returns true.
+     * ```ts
+     * // "a" and "b" will be called sequentially after the previous chain
+     * // if the filter's predicate returns true.
+     * composed.filter(predicate, a, b);
+     * ```
+     *
+     * This method combines all passed middleware into one chain and
+     * returns a new composed. The returned instance can be further extended
+     * and all changes will be regarded here.
+     */
+    filter: (
+        predicate: MaybeArray<(context: Context) => boolean>,
+        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
+    ) => Composed<Context>;
 
     /**
      * Branches the middleware execution based on a predicate.
@@ -320,12 +342,18 @@ export function compose<Context>(
     const api: ComposedApi<Context> = {
         first,
         last,
+        fork(...middlewares) {
+            return compose(this.last, ...middlewares);
+        },
+        forkEach(...middlewares) {
+            return middlewares.map((middleware) => this.fork(middleware));
+        },
         use(...middlewares) {
-            const next = compose(this.last, ...middlewares);
+            const next = this.fork(this.last, ...middlewares);
             this.last = next.last;
             return next;
         },
-        filter(predicate, ...middlewares) {
+        forkFilter(predicate, ...middlewares) {
             const filter = composeFilter(predicate);
             const next = compose(...middlewares);
 
@@ -336,15 +364,12 @@ export function compose<Context>(
                 target: next.first,
             });
 
-            this.last = next.last;
-
             return next;
         },
-        fork(...middlewares) {
-            return compose(this.last, ...middlewares);
-        },
-        forkEach(...middlewares) {
-            return middlewares.map((middleware) => this.fork(middleware));
+        filter(predicate, ...middlewares) {
+            const next = this.forkFilter(predicate, ...middlewares);
+            this.last = next.last;
+            return next;
         },
         branch(predicate, matchMiddlewares, mismatchMiddlewares) {
             const filter = composeFilter(predicate);
