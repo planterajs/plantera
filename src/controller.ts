@@ -1,5 +1,6 @@
-import { MaybePromise, RequestContext } from "./types";
+import { MaybePromise } from "./types";
 import { createEffect } from "effector/compat";
+import { RequestContext } from "./context";
 
 /**
  * Creates a controller middleware that executes a given function and sends the result
@@ -25,18 +26,12 @@ export function controller<Context extends RequestContext, Params, Done>(
         try {
             const value = await fn(map[0] ? (map[0](context) as any) : context);
 
-            if (!context.res.headersSent && !context.res.sent) {
+            if (!context.res.sent) {
                 context.res.statusCode = 200;
-
-                if (value instanceof Object) {
-                    context.res.setHeader("Content-Type", "application/json");
-                    context.res.send(JSON.stringify(value));
-                } else {
-                    context.res.send(value);
-                }
+                context.res.send(value);
             }
         } catch (error) {
-            if (!context.res.headersSent && !context.res.sent) {
+            if (!context.res.sent) {
                 context.res.statusCode = 400;
 
                 const responseError =
@@ -52,8 +47,7 @@ export function controller<Context extends RequestContext, Params, Done>(
                               message: error,
                           };
 
-                context.res.setHeader("Content-Type", "application/json");
-                context.res.send(responseError);
+                context.res.end(responseError);
             }
         }
     });
