@@ -164,6 +164,17 @@ export function execute<Context>(
     });
 }
 
+const __composed = Symbol("IsComposed");
+
+function isComposed<Context>(
+    middleware: MiddlewareLike<Context>,
+): middleware is Composed<Context> {
+    return (
+        "__composed" in middleware &&
+        Object.is(middleware.__composed, __composed)
+    );
+}
+
 function concat<Context>(
     from: EffectOrComposed<Context>,
     to: EffectOrComposed<Context>,
@@ -183,17 +194,6 @@ function concat<Context>(
 function concatEach<Context>(...middlewares: EffectOrComposed<Context>[]) {
     middlewares.reduce(concat);
     return middlewares;
-}
-
-const __composed = Symbol("IsComposed");
-
-function isComposed<Context>(
-    middleware: MiddlewareLike<Context>,
-): middleware is Composed<Context> {
-    return (
-        "__composed" in middleware &&
-        Object.is(middleware.__composed, __composed)
-    );
 }
 
 function extractFirst<Context>(middleware: EffectOrComposed<Context>) {
