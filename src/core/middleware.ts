@@ -1,4 +1,13 @@
-import { createEffect, Effect, sample, split } from "effector";
+import {
+    createEffect,
+    createEvent,
+    Effect,
+    Event,
+    EventCallable,
+    sample,
+    split,
+    UnitTargetable,
+} from "effector";
 import { flatten } from "lodash";
 import { MaybeArray, MaybePromise } from "../types";
 import { toEffect } from "./helpers/toEffect";
@@ -8,7 +17,7 @@ import { composeFilter } from "./helpers/composeFilter";
 /**
  * Middleware in the form of a function.
  */
-export type MiddlewareFn<Context> = (
+export type MiddlewareFunction<Context> = (
     context: Context,
 ) => MaybePromise<Context | void>;
 
@@ -33,7 +42,7 @@ export type MiddlewareEffectDone<Context> = {
  * Any compatible form of middleware, such as function, effect or composed.
  */
 export type MiddlewareLike<Context, Fail = Error> =
-    | MiddlewareFn<Context>
+    | MiddlewareFunction<Context>
     | MiddlewareEffect<Context, Fail>
     | Composed<Context>;
 
@@ -41,34 +50,16 @@ export type EffectOrComposed<Context> =
     | MiddlewareEffect<Context>
     | Composed<Context>;
 
-/**
- * Representation of composed middleware tree.
- */
-export type PlainComposedTree<Context> = {
-    chain: MiddlewareEffect<Context>[];
-    forks: (MiddlewareEffect<Context> | PlainComposedTree<Context>)[][];
-};
-
 export interface ComposedApi<Context> {
     __composed: typeof __composed;
 
-    chain: EffectOrComposed<Context>[];
-    forks: EffectOrComposed<Context>[][];
-
     first: MiddlewareEffect<Context>;
     last: MiddlewareEffect<Context>;
+    step: EventCallable<Context>;
 
-    unrollChain(): MiddlewareEffect<Context>[];
-
-    unroll(): PlainComposedTree<Context>;
-
-    fork(
+    prepend(
         ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
     ): Composed<Context>;
-
-    forkEach(
-        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
-    ): Composed<Context>[];
 
     use(
         ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
@@ -76,6 +67,27 @@ export interface ComposedApi<Context> {
 
     filter(
         predicate: MaybeArray<(context: Context) => boolean>,
+        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
+    ): Composed<Context>;
+
+    forEach<Product>(
+        middlewares: MaybeArray<MiddlewareLike<Context>>[],
+        factory: (
+            middleware: MiddlewareLike<Context>,
+            instance: Composed<Context>,
+        ) => Product,
+    ): Product[];
+
+    intercept(
+        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
+    ): Composed<Context>;
+
+    on(
+        predicate: MaybeArray<(context: Context) => boolean>,
+        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
+    ): Composed<Context>;
+
+    fork(
         ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
     ): Composed<Context>;
 
@@ -167,7 +179,7 @@ export function execute<Context>(
 const __composed = Symbol("IsComposed");
 
 function isComposed<Context>(
-    middleware: MiddlewareLike<Context>,
+    middleware: MiddlewareLike<Context> | Event<Context>,
 ): middleware is Composed<Context> {
     return (
         "__composed" in middleware &&
@@ -175,24 +187,83 @@ function isComposed<Context>(
     );
 }
 
-function concat<Context>(
-    from: EffectOrComposed<Context>,
-    to: EffectOrComposed<Context>,
+function forwardEffects<Context>(
+    from: MiddlewareEffect<Context>,
+    to: MiddlewareEffect<Context>,
 ) {
-    const first = isComposed(from) ? from.last : from;
-    const second = isComposed(to) ? to.first : to;
-
     sample({
-        clock: first.done,
+        clock: from.done,
         fn: extractContext<Context>,
-        target: second,
+        target: to,
     });
 
     return to;
 }
 
-function concatEach<Context>(...middlewares: EffectOrComposed<Context>[]) {
-    middlewares.reduce(concat);
+function forwardEffectsWithFilter<Context>(
+    predicate: MaybeArray<(context: Context) => boolean>,
+    from: MiddlewareEffect<Context>,
+    to: MiddlewareEffect<Context>,
+) {
+    const filter = composeFilter(predicate);
+
+    sample({
+        clock: from.done,
+        filter: (done) => filter(extractContext(done)),
+        fn: extractContext<Context>,
+        target: to,
+    });
+
+    return to;
+}
+
+function forwardEffectToEvent<Context>(
+    from: MiddlewareEffect<Context>,
+    to: EventCallable<Context>,
+) {
+    return sample({
+        clock: from.done,
+        fn: extractContext<Context>,
+        target: to,
+    });
+}
+
+function forwardEventToEffect<Context>(
+    from: EventCallable<Context>,
+    to: MiddlewareEffect<Context>,
+) {
+    return sample({
+        clock: from,
+        target: to,
+    });
+}
+
+function forwardEventToEffectWithFilter<Context>(
+    predicate: MaybeArray<(context: Context) => boolean>,
+    from: EventCallable<Context>,
+    to: MiddlewareEffect<Context>,
+) {
+    return sample({
+        clock: from,
+        filter: composeFilter(predicate),
+        target: to,
+    });
+}
+
+function forwardEffectOrComposed<Context>(
+    from: EffectOrComposed<Context>,
+    to: EffectOrComposed<Context>,
+) {
+    return forwardEffects(
+        isComposed(from) ? from.last : from,
+        isComposed(to) ? to.first : to,
+    );
+}
+
+function concatEffectOrComposed<Context>(
+    ...middlewares: EffectOrComposed<Context>[]
+) {
+    middlewares.reduce(forwardEffectOrComposed);
     return middlewares;
 }
 
@@ -201,7 +272,7 @@ function extractFirst<Context>(middleware: EffectOrComposed<Context>) {
 }
 
 function extractLast<Context>(middleware: EffectOrComposed<Context>) {
-    return isComposed(middleware) ? middleware.first : middleware;
+    return isComposed(middleware) ? middleware.last : middleware;
 }
 
 function toEffectOrComposed<Context>(middleware: MiddlewareLike<Context>) {
@@ -211,133 +282,142 @@ function toEffectOrComposed<Context>(middleware: MiddlewareLike<Context>) {
 export function compose<Context>(
     ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
 ): Composed<Context> {
-    let chain: EffectOrComposed<Context>[] =
+    let effectOrComposedList: EffectOrComposed<Context>[] =
         middlewares.length === 0
             ? [pass()]
-            : concatEach(...flatten(middlewares).map(toEffectOrComposed));
-    let forks: EffectOrComposed<Context>[][] = [];
+            : concatEffectOrComposed(
+                  ...flatten(middlewares).map(toEffectOrComposed),
+              );
 
-    const first = () => extractFirst(chain[0]);
-    const last = () => extractLast(chain.at(-1) as EffectOrComposed<Context>);
+    let first = extractFirst(effectOrComposedList[0]);
+    let last = extractLast(
+        effectOrComposedList.at(-1) as EffectOrComposed<Context>,
+    );
 
-    function trimLeaf(middlewares: EffectOrComposed<Context>[]) {
-        if (Object.is(extractFirst(middlewares[0]), last()))
-            return middlewares.slice(1);
-        return middlewares;
+    const step = createEvent<Context>();
+    effectOrComposedList.forEach((middleware) =>
+        isComposed(middleware)
+            ? middleware.intercept(step)
+            : forwardEffectToEvent(middleware, step),
+    );
+
+    function selfExecute(context: Context) {
+        return execute(first, last, context);
     }
 
-    function pushToChain(middlewares: EffectOrComposed<Context>[]) {
-        chain.push(...trimLeaf(middlewares));
+    function wrap(instance: ComposedApi<Context>) {
+        return Object.assign(selfExecute, instance);
     }
 
-    function pushToForks(middlewares: EffectOrComposed<Context>[]) {
-        forks.push(trimLeaf(middlewares));
-    }
-
-    function concatWithFilter(
-        predicate: MaybeArray<(context: Context) => boolean>,
-        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
-    ): Composed<Context> {
-        const filter = composeFilter(predicate);
+    function forward(
+        middlewares: MaybeArray<MiddlewareLike<Context>>[],
+        shouldExtend = false,
+    ) {
         const next = compose(...middlewares);
-
-        sample({
-            clock: last().done,
-            filter: (done) => filter(extractContext(done)),
-            fn: extractContext<Context>,
-            target: next.first,
-        });
+        forwardEffects(last, next.first);
+        if (shouldExtend) last = next.last;
+        next.intercept(step);
 
         return next;
     }
 
-    function selfExecute(context: Context) {
-        return execute(first(), last(), context);
+    function forwardWithFilter(
+        predicate: MaybeArray<(context: Context) => boolean>,
+        middlewares: MaybeArray<MiddlewareLike<Context>>[],
+        shouldExtend = false,
+    ) {
+        const next = compose(...middlewares);
+        forwardEffectsWithFilter(predicate, last, next.first);
+        if (shouldExtend) last = next.last;
+        next.intercept(step);
+
+        return next;
     }
 
-    const api: ComposedApi<Context> = {
+    function backward(
+        middlewares: MaybeArray<MiddlewareLike<Context>>[],
+        shouldExtend = false,
+    ) {
+        const before = compose(...middlewares);
+        forwardEffects(before.last, first);
+        if (shouldExtend) first = before.first;
+        before.intercept(step);
+
+        return wrap(instance);
+    }
+
+    const instance: ComposedApi<Context> = {
         __composed: __composed,
 
-        get chain() {
-            return chain;
+        get first() {
+            return first;
         },
-        get forks() {
-            return forks;
+        get last() {
+            return last;
         },
-        get first(): MiddlewareEffect<Context> {
-            return first();
-        },
-        get last(): MiddlewareEffect<Context> {
-            return last();
+        get step() {
+            return step;
         },
 
-        unrollChain() {
-            return flatten(
-                this.chain.map((middleware) =>
-                    isComposed(middleware)
-                        ? middleware.unrollChain()
-                        : middleware,
-                ),
+        use(...middlewares) {
+            return forward(middlewares, true);
+        },
+
+        prepend(...middlewares) {
+            return backward(middlewares, true);
+        },
+
+        filter(predicate, ...middlewares) {
+            return forwardWithFilter(predicate, middlewares, true);
+        },
+
+        forEach(middlewares, factory) {
+            const flattenMiddlewares = flatten(middlewares);
+            return flattenMiddlewares.map((middleware) =>
+                factory(middleware, wrap(this)),
             );
         },
 
-        unroll() {
-            return {
-                chain: this.unrollChain(),
-                forks: this.forks.map((chain) =>
-                    chain.map((middleware) =>
-                        isComposed(middleware)
-                            ? middleware.unroll()
-                            : middleware,
-                    ),
-                ),
-            };
-        },
+        intercept(...middlewares) {
+            const next = compose(...middlewares);
+            forwardEventToEffect(this.step, next.first);
 
-        fork(...middlewares): Composed<Context> {
-            const next = compose(this.last, ...middlewares);
-            pushToForks(next.chain);
             return next;
         },
 
-        forkEach(...middlewares): Composed<Context>[] {
-            return middlewares.map((middleware) => this.fork(middleware));
-        },
+        on(predicate, ...middlewares) {
+            const next = compose(...middlewares);
+            forwardEventToEffectWithFilter(predicate, this.step, next.first);
 
-        use(...middlewares): Composed<Context> {
-            const next = compose(this.last, ...middlewares);
-            pushToChain(next.chain);
             return next;
         },
 
-        filter(predicate, ...middlewares): Composed<Context> {
-            const next = concatWithFilter(predicate, ...middlewares);
-            pushToChain(next.chain);
-            return next;
+        fork(...middlewares) {
+            return forward(middlewares);
         },
 
-        forkFilter(predicate, ...middlewares): Composed<Context> {
-            const next = concatWithFilter(predicate, ...middlewares);
-            pushToForks(next.chain);
-            return next;
+        forkFilter(predicate, ...middlewares) {
+            return forwardWithFilter(predicate, middlewares);
         },
 
         branch(predicate, matchMiddlewares, mismatchMiddlewares) {
-            const filter = composeFilter(predicate);
             const match = compose(matchMiddlewares);
             const mismatch = compose(mismatchMiddlewares);
+            match.intercept(this.step);
+            mismatch.intercept(this.step);
+
+            const filter = composeFilter(predicate);
 
             return this.use((context) =>
-                filter(context)
-                    ? match(context)
-                    : mismatch(context),
+                filter(context) ? match(context) : mismatch(context),
             );
         },
 
         split(predicate, matchMiddlewares, mismatchMiddlewares) {
-            const filter = composeFilter(predicate);
             const match = compose(matchMiddlewares);
             const mismatch = compose(mismatchMiddlewares);
+            match.intercept(this.step);
+            mismatch.intercept(this.step);
 
             const prependMiddlewareContextResolver = <Context>(
                 effect: MiddlewareEffect<Context>,
@@ -351,6 +431,8 @@ export function compose<Context>(
                 mismatch.first,
             );
 
+            const filter = composeFilter(predicate);
+
             split({
                 clock: this.last.done,
                 source: this.last.done,
@@ -361,11 +443,8 @@ export function compose<Context>(
                     mismatch: mismatchTarget,
                 },
             });
-
-            pushToForks(match.chain);
-            pushToForks(mismatch.chain);
         },
     };
 
-    return Object.assign(selfExecute, api);
+    return wrap(instance);
 }
