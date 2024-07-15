@@ -44,6 +44,7 @@ export type RouterApi<Context> = {
 
 export type Router<Context> = Composed<Context> & RouterApi<Context>;
 
+
 /**
  * Creates a new router. It extends the basic middleware interface, allowing
  * to install custom middleware and define control flow.
@@ -91,14 +92,20 @@ export type Router<Context> = Composed<Context> & RouterApi<Context>;
 export function createRouter<Context extends RequestContext>(
     ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
 ): Router<Context> {
-    const middleware = compose(...middlewares, query());
+    return decorateWithRouter(compose(query(), ...middlewares));
+}
 
+export function decorateWithRouter<Context extends RequestContext>(
+    middleware: Composed<Context>,
+): Router<Context> {
     const useRoute = (
         method: HttpMethod,
         path: string,
         ...handlers: MaybeArray<MiddlewareLike<Context>>[]
     ) => {
-        return createRouter(middleware.fork(route(method, path, ...handlers)));
+        return decorateWithRouter(
+            middleware.fork(route(method, path, ...handlers)),
+        );
     };
 
     const methodMacros = Object.fromEntries(
@@ -116,12 +123,12 @@ export function createRouter<Context extends RequestContext>(
             return middleware(createContext(req, res) as Context);
         },
         prefix(path, nesting = true) {
-            return createRouter(middleware.fork(prefix(path, nesting)));
+            return decorateWithRouter(middleware.fork(prefix(path, nesting)));
         },
         route(path, ...handlers) {
             return useRoute(HttpMethods.Unspecified, path, ...handlers);
         },
-        ...methodMacros
+        ...methodMacros,
     };
 
     return Object.assign(middleware, api);
