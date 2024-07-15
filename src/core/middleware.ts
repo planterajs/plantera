@@ -57,10 +57,6 @@ export interface ComposedApi<Context> {
     last: MiddlewareEffect<Context>;
     step: EventCallable<Context>;
 
-    prepend(
-        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
-    ): Composed<Context>;
-
     use(
         ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
     ): Composed<Context>;
@@ -83,6 +79,11 @@ export interface ComposedApi<Context> {
     ): Composed<Context>;
 
     on(
+        predicate: MaybeArray<(context: Context) => boolean>,
+        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
+    ): Composed<Context>;
+
+    when(
         predicate: MaybeArray<(context: Context) => boolean>,
         ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
     ): Composed<Context>;
@@ -187,7 +188,7 @@ function isComposed<Context>(
     );
 }
 
-function forwardEffects<Context>(
+function linkEffects<Context>(
     from: MiddlewareEffect<Context>,
     to: MiddlewareEffect<Context>,
 ) {
@@ -198,72 +199,17 @@ function forwardEffects<Context>(
     });
 
     return to;
-}
-
-function forwardEffectsWithFilter<Context>(
-    predicate: MaybeArray<(context: Context) => boolean>,
-    from: MiddlewareEffect<Context>,
-    to: MiddlewareEffect<Context>,
-) {
-    const filter = composeFilter(predicate);
-
-    sample({
-        clock: from.done,
-        filter: (done) => filter(extractContext(done)),
-        fn: extractContext<Context>,
-        target: to,
-    });
-
-    return to;
-}
-
-function forwardEffectToEvent<Context>(
-    from: MiddlewareEffect<Context>,
-    to: EventCallable<Context>,
-) {
-    return sample({
-        clock: from.done,
-        fn: extractContext<Context>,
-        target: to,
-    });
-}
-
-function forwardEventToEffect<Context>(
-    from: EventCallable<Context>,
-    to: MiddlewareEffect<Context>,
-) {
-    return sample({
-        clock: from,
-        target: to,
-    });
-}
-
-function forwardEventToEffectWithFilter<Context>(
-    predicate: MaybeArray<(context: Context) => boolean>,
-    from: EventCallable<Context>,
-    to: MiddlewareEffect<Context>,
-) {
-    return sample({
-        clock: from,
-        filter: composeFilter(predicate),
-        target: to,
-    });
-}
-
-function forwardEffectOrComposed<Context>(
-    from: EffectOrComposed<Context>,
-    to: EffectOrComposed<Context>,
-) {
-    return forwardEffects(
-        isComposed(from) ? from.last : from,
-        isComposed(to) ? to.first : to,
-    );
 }
 
 function concatEffectOrComposed<Context>(
     ...middlewares: EffectOrComposed<Context>[]
 ) {
-    middlewares.reduce(forwardEffectOrComposed);
+    middlewares.reduce((from, to) =>
+        linkEffects(
+            isComposed(from) ? from.last : from,
+            isComposed(to) ? to.first : to,
+        ),
+    );
     return middlewares;
 }
 
@@ -298,7 +244,11 @@ export function compose<Context>(
     effectOrComposedList.forEach((middleware) =>
         isComposed(middleware)
             ? middleware.intercept(step)
-            : forwardEffectToEvent(middleware, step),
+            : sample({
+                  clock: middleware.done,
+                  fn: extractContext<Context>,
+                  target: step,
+              }),
     );
 
     function selfExecute(context: Context) {
@@ -314,7 +264,7 @@ export function compose<Context>(
         shouldExtend = false,
     ) {
         const next = compose(...middlewares);
-        forwardEffects(last, next.first);
+        linkEffects(last, next.first);
         if (shouldExtend) last = next.last;
         next.intercept(step);
 
@@ -327,23 +277,19 @@ export function compose<Context>(
         shouldExtend = false,
     ) {
         const next = compose(...middlewares);
-        forwardEffectsWithFilter(predicate, last, next.first);
+
+        const filter = composeFilter(predicate);
+        sample({
+            clock: last.done,
+            filter: (done) => filter(extractContext(done)),
+            fn: extractContext<Context>,
+            target: next.first,
+        });
+
         if (shouldExtend) last = next.last;
         next.intercept(step);
 
         return next;
-    }
-
-    function backward(
-        middlewares: MaybeArray<MiddlewareLike<Context>>[],
-        shouldExtend = false,
-    ) {
-        const before = compose(...middlewares);
-        forwardEffects(before.last, first);
-        if (shouldExtend) first = before.first;
-        before.intercept(step);
-
-        return wrap(instance);
     }
 
     const instance: ComposedApi<Context> = {
@@ -363,10 +309,6 @@ export function compose<Context>(
             return forward(middlewares, true);
         },
 
-        prepend(...middlewares) {
-            return backward(middlewares, true);
-        },
-
         filter(predicate, ...middlewares) {
             return forwardWithFilter(predicate, middlewares, true);
         },
@@ -380,14 +322,32 @@ export function compose<Context>(
 
         intercept(...middlewares) {
             const next = compose(...middlewares);
-            forwardEventToEffect(this.step, next.first);
+            sample({
+                clock: this.step,
+                target: next.first,
+            });
 
             return next;
         },
 
         on(predicate, ...middlewares) {
             const next = compose(...middlewares);
-            forwardEventToEffectWithFilter(predicate, this.step, next.first);
+            sample({
+                clock: first,
+                filter: composeFilter(predicate),
+                target: next.first,
+            });
+
+            return next;
+        },
+
+        when(predicate, ...middlewares) {
+            const next = compose(...middlewares);
+            sample({
+                clock: this.step,
+                filter: composeFilter(predicate),
+                target: next.first,
+            });
 
             return next;
         },
