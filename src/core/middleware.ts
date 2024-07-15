@@ -38,6 +38,14 @@ export type MiddlewareEffectDone<Context> = {
 };
 
 /**
+ * Data passed from the effect middleware .fail event.
+ */
+export type MiddlewareEffectFail<Context, Fail = Error> = {
+    params: Context;
+    error: Fail;
+};
+
+/**
  * Any compatible form of middleware, such as function, effect or composed.
  */
 export type MiddlewareLike<Context, Fail = Error> =
@@ -49,12 +57,17 @@ export type EffectOrComposed<Context> =
     | MiddlewareEffect<Context>
     | Composed<Context>;
 
+export type Preset<Context> = (
+    instance: Composed<Context>,
+) => Composed<Context>;
+
 export interface ComposedApi<Context> {
     __composed: typeof __composed;
 
     first: MiddlewareEffect<Context>;
     last: MiddlewareEffect<Context>;
     step: EventCallable<Context>;
+    fail: EventCallable<MiddlewareEffectFail<Context, any>>;
 
     use(
         ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
@@ -67,10 +80,7 @@ export interface ComposedApi<Context> {
 
     forEach<Items extends any[], Product>(
         middlewares: Items,
-        factory: (
-            item: Items[number],
-            instance: Composed<Context>,
-        ) => Product,
+        factory: (item: Items[number], instance: Composed<Context>) => Product,
     ): Product[];
 
     intercept(
@@ -86,6 +96,14 @@ export interface ComposedApi<Context> {
         predicate: MaybeArray<(context: Context) => boolean>,
         ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
     ): Composed<Context>;
+
+    catch(
+        ...middlewares: MaybeArray<
+            MiddlewareLike<MiddlewareEffectFail<Context, any>>
+        >[]
+    ): Composed<MiddlewareEffectFail<Context, any>>;
+
+    apply(...presets: Preset<Context>[]): Composed<Context>;
 
     fork(
         ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
@@ -250,6 +268,16 @@ export function compose<Context>(
               }),
     );
 
+    const fail = createEvent<MiddlewareEffectFail<Context, any>>();
+    effectOrComposedList.forEach((middleware) =>
+        isComposed(middleware)
+            ? middleware.catch(fail)
+            : sample({
+                  clock: middleware.fail,
+                  target: fail,
+              }),
+    );
+
     function selfExecute(context: Context) {
         return execute(first, last, context);
     }
@@ -303,6 +331,9 @@ export function compose<Context>(
         get step() {
             return step;
         },
+        get fail() {
+            return fail;
+        },
 
         use(...middlewares) {
             return forward(middlewares, true);
@@ -348,6 +379,26 @@ export function compose<Context>(
             });
 
             return next;
+        },
+
+        catch(...middlewares) {
+            const next = compose<MiddlewareEffectFail<Context, any>>(
+                ...middlewares,
+            );
+            sample({
+                clock: this.fail,
+                target: next.first,
+            });
+
+            return next;
+        },
+
+        apply(...presets) {
+            return (
+                (presets
+                    .map((preset) => preset(wrap(this)))
+                    .at(-1) as Composed<Context>) || wrap(this)
+            );
         },
 
         fork(...middlewares) {
