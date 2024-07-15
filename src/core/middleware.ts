@@ -6,7 +6,6 @@ import {
     EventCallable,
     sample,
     split,
-    UnitTargetable,
 } from "effector";
 import { flatten } from "lodash";
 import { MaybeArray, MaybePromise } from "../types";
@@ -66,10 +65,10 @@ export interface ComposedApi<Context> {
         ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
     ): Composed<Context>;
 
-    forEach<Product>(
-        middlewares: MaybeArray<MiddlewareLike<Context>>[],
+    forEach<Items extends any[], Product>(
+        middlewares: Items,
         factory: (
-            middleware: MiddlewareLike<Context>,
+            item: Items[number],
             instance: Composed<Context>,
         ) => Product,
     ): Product[];
@@ -314,8 +313,7 @@ export function compose<Context>(
         },
 
         forEach(middlewares, factory) {
-            const flattenMiddlewares = flatten(middlewares);
-            return flattenMiddlewares.map((middleware) =>
+            return middlewares.map((middleware) =>
                 factory(middleware, wrap(this)),
             );
         },
