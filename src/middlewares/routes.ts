@@ -2,21 +2,21 @@ import { HttpMethod, MaybeArray } from "../types";
 import { trimEnd } from "lodash";
 import { match, pathToRegexp } from "path-to-regexp";
 import { HttpMethods } from "../constants";
-import { compose, MiddlewareLike } from "../core";
+import { compose, Composed, MiddlewareLike } from "../core";
 import { RequestContext } from "../context";
 
 /**
  * Registers a new route.
  * ```ts
- * router.use(route("GET", "/:id", ...)); // GET /:id
+ * router.apply(route("GET", "/:id", ...)); // GET /:id
  * ```
  *
  * This middleware sets the metadata of the current route, which allows
  * inherited routes to use its path, allowing the creation of nested routes.
  * ```ts
  * route
- *     .use(route("GET", "/users", ...) // GET /users
- *     .use(route("GET", "/:id", ...) // GET /users/:id
+ *     .apply(route("GET", "/users", ...) // GET /users
+ *     .apply(route("GET", "/:id", ...) // GET /users/:id
  * ```
  *
  * If the route isn't matched, the chain continues to be executed further
@@ -31,23 +31,25 @@ export function route<Context extends RequestContext>(
     pathTemplate: string,
     ...handlers: MaybeArray<MiddlewareLike<Context>>[]
 ) {
-    const middleware = compose<Context>(
-        routeMethodDecorator(method),
-        routePathDecorator(pathTemplate),
-        routeParamsDecorator(),
-    );
-    middleware.forkFilter(
-        [routeMethodPredicate(), routeUrlPredicate()],
-        ...handlers,
-    );
+    return (instance: Composed<Context>) => {
+        const middleware = instance.fork(
+            routeMethodDecorator(method),
+            routePathDecorator(pathTemplate),
+            routeParamsDecorator(),
+        );
+        middleware.forkFilter(
+            [routeMethodPredicate(), routeUrlPredicate()],
+            ...handlers,
+        );
 
-    return middleware;
+        return middleware;
+    };
 }
 
 /**
  * Sets base path for nested routes.
  * ```ts
- * const usersRoute = router.use(prefix("/users"));
+ * const usersRoute = router.apply(prefix("/users"));
  * usersRoute.get(":id", ...); // GET /users/:id
  * ```
  */
@@ -55,7 +57,8 @@ export function prefix<Context extends RequestContext>(
     template: string,
     nesting = true,
 ) {
-    return compose<Context>(routePathDecorator(template, nesting));
+    return (instance: Composed<Context>) =>
+        instance.fork(routePathDecorator(template, nesting));
 }
 
 function routeMethodDecorator<Context extends RequestContext>(
