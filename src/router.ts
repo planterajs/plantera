@@ -113,7 +113,7 @@ export function decorateWithRouter<Context extends RequestContext>(
         ...handlers: MaybeArray<MiddlewareLike<Context>>[]
     ) => {
         return decorateWithRouter(
-            middleware.apply(route(method, path, ...handlers)),
+            middleware.use(route(method, path, ...handlers)),
         );
     };
 
@@ -132,7 +132,7 @@ export function decorateWithRouter<Context extends RequestContext>(
             return middleware(createContext(req, res) as Context);
         },
         prefix(path, nesting = true) {
-            return decorateWithRouter(middleware.apply(prefix(path, nesting)));
+            return decorateWithRouter(middleware.use(prefix(path, nesting)));
         },
         route(path, ...handlers) {
             return useRoute(HttpMethods.Unspecified, path, ...handlers);

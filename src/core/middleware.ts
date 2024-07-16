@@ -12,6 +12,7 @@ import { MaybeArray, MaybePromise } from "../types";
 import { toEffect } from "./helpers/toEffect";
 import { watchOnSpot } from "./helpers/watchOnSpot";
 import { composeFilter } from "./helpers/composeFilter";
+import { Context } from "node:vm";
 
 /**
  * Middleware in the form of a function.
@@ -58,11 +59,42 @@ export type EffectOrComposed<Context> =
     | Composed<Context>;
 
 /**
- * Function that works with composed middleware.
+ * Callable part of preset.
  */
-export type Preset<Context> = (
+export type PresetFunction<Context> = (
     instance: Composed<Context>,
 ) => Composed<Context>;
+
+/**
+ * Middleware that works with composed middleware.
+ */
+export type Preset<Context> = PresetFunction<Context> & {
+    __preset: typeof __preset;
+};
+
+/**
+ * Symbol marker for presets.
+ */
+const __preset = Symbol("IsPreset");
+
+/**
+ * Checks if function is preset.
+ *
+ * @param fn Function that can be a preset.
+ */
+function isPreset(fn: any): fn is Preset<Context> {
+    return "__preset" in fn && Object.is(fn.__preset, __preset);
+}
+
+/**
+ * Creates a middlewares that works with composed middleware.
+ *
+ * @param fn Function of the preset.
+ * @returns Preset middleware.
+ */
+export function createPreset<Context>(fn: PresetFunction<Context>) {
+    return Object.assign(fn, { __preset }) as Preset<Context>;
+}
 
 /**
  * Interface of a composed middleware.
@@ -124,7 +156,7 @@ export interface ComposedApi<Context> {
      * @returns Extension of the current composed middleware.
      */
     use(
-        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
+        ...middlewares: MaybeArray<MiddlewareLike<Context> | Preset<Context>>[]
     ): Composed<Context>;
 
     /**
@@ -275,7 +307,7 @@ export interface ComposedApi<Context> {
      * @params presets List of preset middlewares.
      * @returns Updated instance of the current composed middleware.
      */
-    apply(...presets: Preset<Context>[]): Composed<Context>;
+    apply(...presets: PresetFunction<Context>[]): Composed<Context>;
 
     /**
      * Composes passed middlewares and forwards the last current middleware to
@@ -436,10 +468,10 @@ const __composed = Symbol("IsComposed");
 /**
  * Checks if middleware is composed.
  *
- * @param middleware Value that can be composed middleware.
+ * @param middleware Middleware that can be composed middleware.
  */
 function isComposed<Context>(
-    middleware: MiddlewareLike<Context> | Event<Context>,
+    middleware: MiddlewareLike<Context>,
 ): middleware is Composed<Context> {
     return (
         "__composed" in middleware &&
@@ -609,7 +641,7 @@ export function compose<Context>(
     }
 
     const instance: ComposedApi<Context> = {
-        __composed: __composed,
+        __composed,
 
         get first() {
             return first;
@@ -625,7 +657,18 @@ export function compose<Context>(
         },
 
         use(...middlewares) {
-            return forward(middlewares, true);
+            const flattenedMiddlewares = flatten(middlewares);
+
+            const presets = flattenedMiddlewares.filter(
+                isPreset,
+            ) as Preset<Context>[];
+            this.apply(...presets);
+
+            const rest = flattenedMiddlewares.filter(
+                (middleware) => !isPreset(middleware),
+            ) as MiddlewareLike<Context>[];
+
+            return forward(rest, true);
         },
 
         filter(predicate, ...middlewares) {
@@ -704,7 +747,7 @@ export function compose<Context>(
 
             const filter = composeFilter(predicate);
 
-            return this.use((context) =>
+            return this.use((context: Context) =>
                 filter(context) ? match(context) : mismatch(context),
             );
         },

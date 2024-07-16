@@ -2,7 +2,12 @@ import { HttpMethod, MaybeArray } from "../types";
 import { trimEnd } from "lodash";
 import { match, pathToRegexp } from "path-to-regexp";
 import { HttpMethods } from "../constants";
-import { Composed, MiddlewareLike, Preset } from "../core";
+import {
+    Composed,
+    createPreset,
+    MiddlewareLike,
+    PresetFunction,
+} from "../core";
 import { RequestContext } from "../context";
 
 /**
@@ -37,8 +42,8 @@ export function route<Context extends RequestContext>(
     method: HttpMethod,
     pathTemplate: string,
     ...handlers: MaybeArray<MiddlewareLike<Context>>[]
-): Preset<Context> {
-    return (instance: Composed<Context>) => {
+) {
+    return createPreset((instance: Composed<Context>) => {
         const middleware = instance.fork(
             routeMethodDecorator(method),
             routePathDecorator(pathTemplate),
@@ -50,7 +55,7 @@ export function route<Context extends RequestContext>(
         );
 
         return middleware;
-    };
+    });
 }
 
 /**
@@ -70,9 +75,10 @@ export function route<Context extends RequestContext>(
 export function prefix<Context extends RequestContext>(
     template: string,
     nesting = true,
-): Preset<Context> {
-    return (instance: Composed<Context>) =>
-        instance.fork(routePathDecorator(template, nesting));
+) {
+    return createPreset((instance: Composed<Context>) =>
+        instance.fork(routePathDecorator(template, nesting)),
+    );
 }
 
 function routeMethodDecorator<Context extends RequestContext>(
