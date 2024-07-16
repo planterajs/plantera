@@ -11,7 +11,7 @@ import {
 import { RequestContext } from "../context";
 
 /**
- * **This is preset middleware. Use `apply` to install it in into a composed middleware.**
+ * **This is preset middleware. Use `apply` or `use` to install it in into a composed middleware.**
  *
  * Registers a new route.
  * ```ts
@@ -59,7 +59,7 @@ export function route<Context extends RequestContext>(
 }
 
 /**
- * **This is preset middleware. Use `apply` to install it in into a composed middleware.**
+ * **This is preset middleware. Use `apply` or `use` to install it in into a composed middleware.**
  *
  * Sets base path for nested routes.
  *
