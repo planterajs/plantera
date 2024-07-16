@@ -2,21 +2,23 @@ import { HttpMethod, MaybeArray } from "../types";
 import { trimEnd } from "lodash";
 import { match, pathToRegexp } from "path-to-regexp";
 import { HttpMethods } from "../constants";
-import { compose, MiddlewareLike } from "../core";
+import { Composed, createPreset, MiddlewareLike } from "../core";
 import { RequestContext } from "../context";
 
 /**
+ * **This is preset middleware. Use `apply` or `use` to install it in into a composed middleware.**
+ *
  * Registers a new route.
  * ```ts
- * router.use(route("GET", "/:id", ...)); // GET /:id
+ * router.apply(route("GET", "/:id", ...)); // GET /:id
  * ```
  *
  * This middleware sets the metadata of the current route, which allows
  * inherited routes to use its path, allowing the creation of nested routes.
  * ```ts
  * route
- *     .use(route("GET", "/users", ...) // GET /users
- *     .use(route("GET", "/:id", ...) // GET /users/:id
+ *     .apply(route("GET", "/users", ...) // GET /users
+ *     .apply(route("GET", "/:id", ...) // GET /users/:id
  * ```
  *
  * If the route isn't matched, the chain continues to be executed further
@@ -25,37 +27,53 @@ import { RequestContext } from "../context";
  * Note: Not recommended to use this middleware explicitly; for this,
  * there are methods on the router that create a fork, which allows all
  * routes to be executed in parallel.
+ *
+ * @param method Method that should be matched.
+ * @param pathTemplate Path template that should be matched.
+ * @param handlers List of request handlers.
+ * @returns Route middleware.
  */
 export function route<Context extends RequestContext>(
     method: HttpMethod,
     pathTemplate: string,
     ...handlers: MaybeArray<MiddlewareLike<Context>>[]
 ) {
-    const middleware = compose<Context>(
-        routeMethodDecorator(method),
-        routePathDecorator(pathTemplate),
-        routeParamsDecorator(),
-    );
-    middleware.forkFilter(
-        [routeMethodPredicate(), routeUrlPredicate()],
-        ...handlers,
-    );
+    return createPreset((instance: Composed<Context>) => {
+        const middleware = instance.fork(
+            routeMethodDecorator(method),
+            routePathDecorator(pathTemplate),
+            routeParamsDecorator(),
+        );
+        middleware.forkFilter(
+            [routeMethodPredicate(), routeUrlPredicate()],
+            ...handlers,
+        );
 
-    return middleware;
+        return middleware;
+    });
 }
 
 /**
+ * **This is preset middleware. Use `apply` or `use` to install it in into a composed middleware.**
+ *
  * Sets base path for nested routes.
+ *
  * ```ts
- * const usersRoute = router.use(prefix("/users"));
+ * const usersRoute = router.apply(prefix("/users"));
  * usersRoute.get(":id", ...); // GET /users/:id
  * ```
+ *
+ * @param template Path template that will be attached.
+ * @param nesting Should imply nesting.
+ * @returns Prefix middleware.
  */
 export function prefix<Context extends RequestContext>(
     template: string,
     nesting = true,
 ) {
-    return compose<Context>(routePathDecorator(template, nesting));
+    return createPreset((instance: Composed<Context>) =>
+        instance.fork(routePathDecorator(template, nesting)),
+    );
 }
 
 function routeMethodDecorator<Context extends RequestContext>(

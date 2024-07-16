@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/effector-router.iml" filepath="$PROJECT_DIR$/.idea/effector-router.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/plantera.iml" filepath="$PROJECT_DIR$/.idea/plantera.iml" />
     </modules>
   </component>
 </project>

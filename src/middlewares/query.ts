@@ -1,11 +1,8 @@
 import { RequestContext } from "../context";
 
 /**
- * Parses query parameters from the request URL and attach them to the
+ * Parses query parameters from the request URL and attaches them to the
  * request context.
- * ```ts
- * composed.use(query()); // { ...context, req: { ...req, query: <data> }
- * ```
  *
  * This middleware is installed by default when the router is initialized,
  * so there is no need to install it manually.

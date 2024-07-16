@@ -1,5 +1,5 @@
 import { MaybePromise } from "./types";
-import { createEffect } from "effector/compat";
+import { createEffect } from "effector";
 import { RequestContext } from "./context";
 
 /**
@@ -8,13 +8,17 @@ import { RequestContext } from "./context";
  * is automatically formatted based on the function's return value.
  *
  * ```ts
- * const getUserController = controller(async (params) => {
- *   const user = await getUserFromDatabase(params.id);
- *   return user;
- * }, (context) => ({ id: context.req.params.id }));
+ * const greetingController = controller(
+ *     (name) => `hello, ${name}!`,
+ *     (context) => context.req.params.name
+ * );
  *
- * composed.use(route('GET', '/user/:id', getUserController));
+ * router.get("/hello/:name", greetingController);
  * ```
+ *
+ * @param fn Controller's callback.
+ * @param map Adapter function.
+ * @returns Controller middleware.
  */
 export function controller<Context extends RequestContext, Params, Done>(
     fn: (params: Params) => MaybePromise<Done>,
