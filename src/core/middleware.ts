@@ -2,10 +2,10 @@ import {
     createEffect,
     createEvent,
     Effect,
-    Event,
+    Event, EventAsReturnType,
     EventCallable,
     sample,
-    split,
+    split
 } from "effector";
 import { flatten } from "lodash";
 import { MaybeArray, MaybePromise } from "../types";
@@ -168,6 +168,18 @@ export interface ComposedApi<Context> {
      * to unpredictable behaviour.
      */
     fail: EventCallable<MiddlewareEffectFail<Context, any>>;
+
+    /**
+     * An alias event, derived for `last` property. It only fires when `last`
+     * effect is fired.
+     */
+    passes: EventAsReturnType<Context>;
+
+    /**
+     * An alias event, derived for `last.done` property.
+     * It only fires when `last.done` effect is fired.
+     */
+    ends: EventAsReturnType<Context>;
 
     /**
      * Composes passed middlewares and forwards the last current middleware to
@@ -627,6 +639,9 @@ export function compose<Context>(
               }),
     );
 
+    const passes = last.map(params => params);
+    const ends = last.done.map(extractContext);
+
     function selfExecute(context: Context) {
         return execute(first, last, context);
     }
@@ -682,6 +697,12 @@ export function compose<Context>(
         },
         get fail() {
             return fail;
+        },
+        get passes() {
+            return passes;
+        },
+        get ends() {
+            return ends;
         },
 
         use(...middlewares) {
