@@ -2,12 +2,7 @@ import { HttpMethod, MaybeArray } from "../types";
 import { trimEnd } from "lodash";
 import { match, pathToRegexp } from "path-to-regexp";
 import { HttpMethods } from "../constants";
-import {
-    Composed,
-    createPreset,
-    MiddlewareLike,
-    PresetFunction,
-} from "../core";
+import { Composed, createPreset, MiddlewareLike } from "../core";
 import { RequestContext } from "../context";
 
 /**
