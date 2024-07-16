@@ -66,7 +66,11 @@ export type PresetFunction<Context> = (
 ) => Composed<Context>;
 
 /**
- * Middleware that works with composed middleware.
+ * Middleware that works with composed middleware API.
+ * Presets are used to directly modify and update an instance. For example,
+ * use `fork` or `filter` on it without the need to create a separate composed.
+ *
+ * Use `createPreset` method to create new presets.
  */
 export type Preset<Context> = PresetFunction<Context> & {
     __preset: typeof __preset;
@@ -87,7 +91,31 @@ function isPreset(fn: any): fn is Preset<Context> {
 }
 
 /**
- * Creates a middlewares that works with composed middleware.
+ * Creates a middlewares that works with composed middleware API.
+ * Presets are used to directly modify and update an instance. For example,
+ * use `fork` or `filter` on it without the need to create a separate composed.
+ *
+ * Presets can be registered in composed middleware with `use` or `apply` methods.
+ *
+ * Without presets:
+ * ```ts
+ * const applyCustomFilter = () => {
+ *     const separateComposed = compose();
+ *     separateComposed.filter(predicate, something);
+ *     return separateComposed;
+ * }
+ *
+ * composed.use(applyCustomFilter());
+ * ```
+ *
+ * With presets:
+ * ```ts
+ * const applyCustomFilter = createPreset(
+ *    source => source.filter(predicate, something)
+ * );
+ *
+ * composed.use(applyCustomFilter);
+ * ```
  *
  * @param fn Function of the preset.
  * @returns Preset middleware.
