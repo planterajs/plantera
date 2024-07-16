@@ -88,6 +88,9 @@ export type Router<Context> = Composed<Context> & RouterApi<Context>;
  *
  * router.use(userRouter);
  * ```
+ *
+ * @param middlewares Pre-installed middlewares.
+ * @returns Router instance.
  */
 export function createRouter<Context extends RequestContext>(
     ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
@@ -95,6 +98,12 @@ export function createRouter<Context extends RequestContext>(
     return decorateWithRouter(compose(query(), ...middlewares));
 }
 
+/**
+ * Decorates some composed middleware with router API.
+ *
+ * @param middleware Composed middleware.
+ * @returns Router instance.
+ */
 export function decorateWithRouter<Context extends RequestContext>(
     middleware: Composed<Context>,
 ): Router<Context> {

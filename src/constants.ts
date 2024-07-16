@@ -1,3 +1,6 @@
+/**
+ * Typed HTTP method map.
+ */
 export enum HttpMethods {
     Unspecified = "UNSPECIFIED",
     Get = "GET",
