@@ -1,18 +1,18 @@
-import { controller, createRouter } from "../../src";
-import { createServer } from "node:http";
+import { controller } from "../../src";
 import { RequestContext } from "../../src";
+import { createApp } from "../../src";
 
-const router = createRouter();
-createServer(router.callback).listen(3000);
+const app = createApp();
 
-router.get(
+app.get(
     "/hello",
     controller(() => "hello!"),
 );
-
-router.get(
+app.get(
     "/:name",
     controller(
         (context: RequestContext) => `hello, ${context.req.params.name}!`,
     ),
 );
+
+app.listen(3000);
