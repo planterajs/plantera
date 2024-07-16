@@ -1,5 +1,8 @@
 <p align="center">
-    <img src="https://raw.githubusercontent.com/ncor/plantera/main/assets/logo.png" height="128">
+    <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="https://github.com/planterajs/plantera/main/assets/logo-light.png"/>
+        <img src="https://github.com/planterajs/plantera/main/assets/logo-dark.png" height="96">
+    </picture>
     <h1 align="center">Plantera</h1>
     <p align="center">Server routing with ease.</p>
 </p>
@@ -19,7 +22,7 @@ npm install plantera
 
 Basic usage:
 ```ts
-import { createServer } from "http"; 
+import { createServer } from "http";
 import { router, controller } from "plantera";
 
 const router = createRouter();
@@ -65,7 +68,7 @@ const hello = controller(
     (context) => context.req.params.name
 );
 ```
-3. A function that already works with the request context and returns some value. 
+3. A function that already works with the request context and returns some value.
 ```ts
 const hello = controller((context: RequestContext) =>
     `hello, ${context.req.params.name}!`
@@ -139,7 +142,7 @@ Multiple routers can be composed with `use`, `route` or other forwarding methods
 const userRouter = createRouter().route("/user");
 // or
 const userRouter = createRouter().prefix("/user");
-    
+
 userRouter.get("/", allUsers);
 userRouter.get("/:id", getUser);
 
@@ -231,9 +234,9 @@ Branches the middleware execution based on a predicate.
 
 ```ts
 composed.branch(
-  predicate,
-  [trueMiddleware],
-  [falseMiddleware]
+    predicate,
+    [trueMiddleware],
+    [falseMiddleware]
 );
 // If predicate(...) is true, trueMiddleware runs.
 // If predicate(...) is false, falseMiddleware runs.
@@ -247,9 +250,9 @@ Splits the middleware execution based on a predicate, similar to `branch`, but u
 
 ```ts
 composed.split(
-  predicate,
-  [trueMiddleware],
-  [falseMiddleware]
+    predicate,
+    [trueMiddleware],
+    [falseMiddleware]
 );
 // If predicate(...) is true, trueMiddleware runs.
 // If predicate(...) is false, falseMiddleware runs.
