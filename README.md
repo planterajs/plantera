@@ -1,7 +1,7 @@
 <p align="center">
     <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="https://github.com/planterajs/plantera/main/assets/logo-light.png"/>
-        <img src="https://github.com/planterajs/plantera/main/assets/logo-dark.png" height="96">
+        <source media="(prefers-color-scheme: dark)" srcset="https://github.com/planterajs/plantera/blob/10dfd96e02fc2899cc7513d324eb8483c3e812e0/assets/logo-light.png"/>
+        <img src="https://github.com/planterajs/plantera/blob/10dfd96e02fc2899cc7513d324eb8483c3e812e0/assets/logo-dark.png" height="96">
     </picture>
     <h1 align="center">Plantera</h1>
     <p align="center">Server routing with ease.</p>
