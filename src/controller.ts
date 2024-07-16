@@ -1,5 +1,5 @@
 import { MaybePromise } from "./types";
-import { createEffect } from "effector/compat";
+import { createEffect } from "effector";
 import { RequestContext } from "./context";
 
 /**
