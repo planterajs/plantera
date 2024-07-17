@@ -173,13 +173,13 @@ export interface ComposedApi<Context> {
      * An alias event, derived for `last` property. It only fires when `last`
      * effect is fired.
      */
-    passes: EventAsReturnType<Context>;
+    passed: EventAsReturnType<Context>;
 
     /**
      * An alias event, derived for `last.done` property.
      * It only fires when `last.done` effect is fired.
      */
-    ends: EventAsReturnType<Context>;
+    ended: EventAsReturnType<Context>;
 
     /**
      * Composes passed middlewares and forwards the last current middleware to
@@ -639,8 +639,8 @@ export function compose<Context>(
               }),
     );
 
-    const passes = last.map(params => params);
-    const ends = last.done.map(extractContext);
+    const passed = last.map(params => params);
+    const ended = last.done.map(extractContext);
 
     function selfExecute(context: Context) {
         return execute(first, last, context);
@@ -698,11 +698,11 @@ export function compose<Context>(
         get fail() {
             return fail;
         },
-        get passes() {
-            return passes;
+        get passed() {
+            return passed;
         },
-        get ends() {
-            return ends;
+        get ended() {
+            return ended;
         },
 
         use(...middlewares) {
