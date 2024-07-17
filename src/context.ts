@@ -18,8 +18,20 @@ export type Request<
     Query extends Record<string, any> = Record<string, any>,
     Body extends Record<string, any> = Record<string, any>,
 > = IncomingMessage & {
+    /**
+     * Contains interpreted request body data passed from the client.
+     */
     body: Body;
+
+    /**
+     * Contains a slug parameters based on the relevant route path template
+     * from the request URL.
+     */
     params: Params;
+
+    /**
+     * Contains URL-encoded parameters from the request URL.
+     */
     query: Query;
 };
 
@@ -40,8 +52,23 @@ export type RequestContext<
     Query extends Record<string, any> = Record<string, any>,
     Body extends Record<string, any> = Record<string, any>,
 > = {
+    /**
+     * Meta part of the `RequestContext` object. It used by `route` and `prefix`
+     * middlewares to inform the middlewares about the current route.
+     */
+
     route: RouteMetadata;
+
+    /**
+     * Request part of the `RequestContext` object. It provides additional fields
+     * such as `body` that can be used in middlewares or controllers.
+     */
     req: Request<Params, Query, Body>;
+
+    /**
+     * Response part of the `RequestContext` object. It provides extended API
+     * for convenient response sending.
+     */
     res: Response;
 };
 

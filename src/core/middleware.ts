@@ -2,10 +2,10 @@ import {
     createEffect,
     createEvent,
     Effect,
-    Event,
+    Event, EventAsReturnType,
     EventCallable,
     sample,
-    split,
+    split
 } from "effector";
 import { flatten } from "lodash";
 import { MaybeArray, MaybePromise } from "../types";
@@ -134,7 +134,7 @@ export interface ComposedApi<Context> {
     __composed: typeof __composed;
 
     /**
-     * First effect of the current composed middleware. It can be used as a
+     * A first effect of the current composed middleware. It can be used as a
      * firing event because of its targeting properties.
      *
      * Not recommended to use it in another `compose` explicitly, it may lead
@@ -143,7 +143,7 @@ export interface ComposedApi<Context> {
     first: MiddlewareEffect<Context>;
 
     /**
-     * Last effect of the current composed middleware. It can be used as a
+     * A last effect of the current composed middleware. It can be used as a
      * terminator event because of its targeting properties.
      *
      * Not recommended to use it in another `compose` explicitly, it may lead
@@ -152,7 +152,7 @@ export interface ComposedApi<Context> {
     last: MiddlewareEffect<Context>;
 
     /**
-     * Event that fires after the successful execution of each of the
+     * An event that fires after the successful execution of each of the
      * middleware of the current composed middleware system.
      *
      * Not recommended to use it in another `compose` explicitly, it may lead
@@ -161,13 +161,25 @@ export interface ComposedApi<Context> {
     step: EventCallable<Context>;
 
     /**
-     * Event that fires when any of the current system's middleware throws
+     * An event that fires when any of the current system's middleware throws
      * an exception.
      *
      * Not recommended to use it in another `compose` explicitly, it may lead
      * to unpredictable behaviour.
      */
     fail: EventCallable<MiddlewareEffectFail<Context, any>>;
+
+    /**
+     * An alias event, derived for `last` property. It only fires when `last`
+     * effect is fired.
+     */
+    passed: EventAsReturnType<Context>;
+
+    /**
+     * An alias event, derived for `last.done` property.
+     * It only fires when `last.done` effect is fired.
+     */
+    ended: EventAsReturnType<Context>;
 
     /**
      * Composes passed middlewares and forwards the last current middleware to
@@ -627,6 +639,9 @@ export function compose<Context>(
               }),
     );
 
+    const passed = last.map(params => params);
+    const ended = last.done.map(extractContext);
+
     function selfExecute(context: Context) {
         return execute(first, last, context);
     }
@@ -682,6 +697,12 @@ export function compose<Context>(
         },
         get fail() {
             return fail;
+        },
+        get passed() {
+            return passed;
+        },
+        get ended() {
+            return ended;
         },
 
         use(...middlewares) {

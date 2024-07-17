@@ -4,13 +4,15 @@ import { IncomingMessage, ServerResponse } from "http";
 import { query, route, prefix } from "./middlewares";
 import { HttpMethods } from "./constants";
 import { createContext, RequestContext } from "./context";
+import { createEvent, EventCallable } from "effector";
+import { omit } from "lodash";
 
 type MethodMacros<Context> = Record<
     Lowercase<Exclude<HttpMethod, "UNSPECIFIED">>,
     (
         path: string,
         ...handlers: MaybeArray<MiddlewareLike<Context>>[]
-    ) => Router<Context>
+    ) => RouterWithEvent<Context>
 >;
 
 export type RouterApi<Context> = {
@@ -39,11 +41,16 @@ export type RouterApi<Context> = {
     route: (
         path: string,
         ...handlers: MaybeArray<MiddlewareLike<Context>>[]
-    ) => Router<Context>;
+    ) => RouterWithEvent<Context>;
 } & MethodMacros<Context>;
 
 export type Router<Context> = Composed<Context> & RouterApi<Context>;
 
+/**
+ * Router instance that holds some event.
+ */
+export type RouterWithEvent<Context> = Router<Context> &
+    Omit<EventCallable<Context>, "filter" | "filterMap">;
 
 /**
  * Creates a new router. It extends the basic middleware interface, allowing
@@ -112,8 +119,13 @@ export function decorateWithRouter<Context extends RequestContext>(
         path: string,
         ...handlers: MaybeArray<MiddlewareLike<Context>>[]
     ) => {
-        return decorateWithRouter(
-            middleware.use(route(method, path, ...handlers)),
+        const matches = createEvent<Context>();
+
+        return Object.assign(
+            decorateWithRouter(
+                middleware.use(route(method, path, ...handlers, matches)),
+            ),
+            omit(matches, ["filter", "filterMap"]),
         );
     };
 
