@@ -505,7 +505,7 @@ firing event because of its targeting properties.
   an exception.
 - `.passed` - an alias event, derived for `last` property. It only fires when `last`
   effect is fired.
-- `.ends` - an alias event, derived for `last.done` property.
+- `.ended` - an alias event, derived for `last.done` property.
   It only fires when `last.done` effect is fired.
 
 ## Links
