@@ -134,7 +134,7 @@ export interface ComposedApi<Context> {
     __composed: typeof __composed;
 
     /**
-     * First effect of the current composed middleware. It can be used as a
+     * A first effect of the current composed middleware. It can be used as a
      * firing event because of its targeting properties.
      *
      * Not recommended to use it in another `compose` explicitly, it may lead
@@ -143,7 +143,7 @@ export interface ComposedApi<Context> {
     first: MiddlewareEffect<Context>;
 
     /**
-     * Last effect of the current composed middleware. It can be used as a
+     * A last effect of the current composed middleware. It can be used as a
      * terminator event because of its targeting properties.
      *
      * Not recommended to use it in another `compose` explicitly, it may lead
@@ -152,7 +152,7 @@ export interface ComposedApi<Context> {
     last: MiddlewareEffect<Context>;
 
     /**
-     * Event that fires after the successful execution of each of the
+     * An event that fires after the successful execution of each of the
      * middleware of the current composed middleware system.
      *
      * Not recommended to use it in another `compose` explicitly, it may lead
@@ -161,7 +161,7 @@ export interface ComposedApi<Context> {
     step: EventCallable<Context>;
 
     /**
-     * Event that fires when any of the current system's middleware throws
+     * An event that fires when any of the current system's middleware throws
      * an exception.
      *
      * Not recommended to use it in another `compose` explicitly, it may lead
