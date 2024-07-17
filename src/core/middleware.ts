@@ -639,9 +639,6 @@ export function compose<Context>(
               }),
     );
 
-    const passed = last.map(params => params);
-    const ended = last.done.map(extractContext);
-
     function selfExecute(context: Context) {
         return execute(first, last, context);
     }
@@ -699,10 +696,10 @@ export function compose<Context>(
             return fail;
         },
         get passed() {
-            return passed;
+            return last.map(params => params);
         },
         get ended() {
-            return ended;
+            return last.done.map(extractContext);
         },
 
         use(...middlewares) {

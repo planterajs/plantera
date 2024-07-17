@@ -1,7 +1,7 @@
 {
   "name": "plantera",
-  "version": "0.4.0",
-  "description": "",
+  "version": "0.4.1",
+  "description": "Server routing with ease.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
