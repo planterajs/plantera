@@ -25,11 +25,6 @@ export type MiddlewareFunction<Context> = (
 ) => MaybePromise<Context | void>;
 
 /**
- * Middleware in the form of an event.
- */
-export type MiddlewareEvent<Context> = EventCallable<Context>;
-
-/**
  * Middleware in the form of an effect.
  */
 export type MiddlewareEffect<Context, Fail = Error> = Effect<
@@ -60,7 +55,6 @@ export type MiddlewareEffectFail<Context, Fail = Error> = {
 export type MiddlewareLike<Context, Fail = Error> =
     | MiddlewareFunction<Context>
     | MiddlewareEffect<Context, Fail>
-    | MiddlewareEvent<Context>
     | Composed<Context>;
 
 export type EffectOrComposed<Context> =
@@ -1040,7 +1034,9 @@ export function compose<Context>(
 
             this.split(filter, loop, next);
 
-            return next;
+            last = next.last;
+
+            return concat({ middlewares: [...nextMiddlewares] });
         },
 
         pass(adapter, ...middlewares) {
