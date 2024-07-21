@@ -1,17 +1,20 @@
 import {
     createEffect,
     createEvent,
+    createStore,
     Effect,
-    Event, EventAsReturnType,
+    Event,
+    EventAsReturnType,
     EventCallable,
     sample,
-    split
+    split,
+    StoreWritable,
 } from "effector";
 import { flatten } from "lodash";
 import { MaybeArray, MaybePromise } from "../types";
-import { toEffect } from "./helpers/toEffect";
-import { watchOnSpot } from "./helpers/watchOnSpot";
-import { composeFilter } from "./helpers/composeFilter";
+import { toEffect } from "./toEffect";
+
+import { composeFilter } from "./composeFilter";
 import { Context } from "node:vm";
 
 /**
@@ -20,6 +23,11 @@ import { Context } from "node:vm";
 export type MiddlewareFunction<Context> = (
     context: Context,
 ) => MaybePromise<Context | void>;
+
+/**
+ * Middleware in the form of an event.
+ */
+export type MiddlewareEvent<Context> = EventCallable<Context>;
 
 /**
  * Middleware in the form of an effect.
@@ -33,7 +41,7 @@ export type MiddlewareEffect<Context, Fail = Error> = Effect<
 /**
  * Data passed from the effect middleware .done event.
  */
-export type MiddlewareEffectDone<Context> = {
+export type MiddlewareEffectDoneData<Context> = {
     params: Context;
     result: Context | void;
 };
@@ -52,6 +60,7 @@ export type MiddlewareEffectFail<Context, Fail = Error> = {
 export type MiddlewareLike<Context, Fail = Error> =
     | MiddlewareFunction<Context>
     | MiddlewareEffect<Context, Fail>
+    | MiddlewareEvent<Context>
     | Composed<Context>;
 
 export type EffectOrComposed<Context> =
@@ -63,7 +72,7 @@ export type EffectOrComposed<Context> =
  */
 export type PresetFunction<Context> = (
     instance: Composed<Context>,
-) => Composed<Context>;
+) => Composed<Context> | void;
 
 /**
  * Middleware that works with composed middleware API.
@@ -111,7 +120,7 @@ function isPreset(fn: any): fn is Preset<Context> {
  * With presets:
  * ```ts
  * const applyCustomFilter = createPreset(
- *    source => source.filter(predicate, something)
+ *    current => current.filter(predicate, something)
  * );
  *
  * composed.use(applyCustomFilter);
@@ -122,6 +131,37 @@ function isPreset(fn: any): fn is Preset<Context> {
  */
 export function createPreset<Context>(fn: PresetFunction<Context>) {
     return Object.assign(fn, { __preset }) as Preset<Context>;
+}
+
+/**
+ * Creates a middleware that have access to the composed middleware
+ * to which it's being attached.
+ *
+ * Without `aware`:
+ * ```ts
+ * const guard = createPreset((current) => {
+ *     current.use((context) => {
+ *         if (isBad(context)) current.terminated();
+ *     })
+ * });
+ * ```
+ *
+ * With `aware`:
+ * ```ts
+ * const guard = aware((context, current) => {
+ *     if (isBad(context)) current.terminated();
+ * });
+ * ```
+ *
+ * @param fn Function of a middleware.
+ * @returns Preset middleware.
+ */
+export function aware<Context>(
+    fn: (current: Composed<Context>, context: Context) => Context | void,
+) {
+    return createPreset<Context>((current) =>
+        current.use((context: Context) => fn(current, context)),
+    );
 }
 
 /**
@@ -167,7 +207,7 @@ export interface ComposedApi<Context> {
      * Not recommended to use it in another `compose` explicitly, it may lead
      * to unpredictable behaviour.
      */
-    fail: EventCallable<MiddlewareEffectFail<Context, any>>;
+    failed: EventCallable<MiddlewareEffectFail<Context, any>>;
 
     /**
      * An alias event, derived for `last` property. It only fires when `last`
@@ -180,6 +220,32 @@ export interface ComposedApi<Context> {
      * It only fires when `last.done` effect is fired.
      */
     ended: EventAsReturnType<Context>;
+
+    /**
+     * Tells if current composed middleware is terminated its execution.
+     * Updates when `terminate` is called.
+     *
+     * Not recommended to use it in another `compose` explicitly, it may lead
+     * to unpredictable behaviour.
+     */
+    $isTerminated: StoreWritable<boolean>;
+
+    /**
+     * Prevents further execution by updating `$isTerminating` store to `false`.
+     *
+     * Not recommended to use it in another `compose` explicitly, it may lead
+     * to unpredictable behaviour.
+     */
+    terminated: EventCallable<void>;
+
+    /**
+     * Triggers execution by firing `first` effect and
+     * updating `$isTerminating` store to `true`.
+     *
+     * Not recommended to use it in another `compose` explicitly, it may lead
+     * to unpredictable behaviour.
+     */
+    executed: EventCallable<Context>;
 
     /**
      * Composes passed middlewares and forwards the last current middleware to
@@ -307,11 +373,11 @@ export interface ComposedApi<Context> {
     ): Composed<Context>;
 
     /**
-     * Composes passed middlewares and forwards `fail` event
+     * Composes passed middlewares and forwards `failed` event
      * to the first passed one with filter attached.
      * Returns composed passed middlewares.
      *
-     * The `fail` event will fire when any of the current system's middleware
+     * The `failed` event will fire when any of the current system's middleware
      * throws an exception. It means, that next composed will run each time some
      * middleware throws an exception.
      *
@@ -439,15 +505,94 @@ export interface ComposedApi<Context> {
         matchMiddlewares: MaybeArray<MiddlewareLike<Context>>,
         mismatchMiddlewares: MaybeArray<MiddlewareLike<Context>>,
     ): void;
+
+    /**
+     * Composes passed predicates and middlewares respectively and
+     * wires middlewares such way that it acts like a `while`. The `loopMiddlewares`
+     * will run in a loop until predicate returns `false`.
+     *
+     * ```ts
+     * const increment = (v: number) => v + 1;
+     * const log = (v: number) => console.log(v);
+     *
+     * const incrementTill = compose<number>();
+     * incrementTill.while((v) => v < 5, [increment], log)
+     * incrementTill(0); // -> 5
+     * ```
+     *
+     * @param predicate Predicate function or list of predicate functions.
+     * @param loopMiddlewares Middlewares that will run in a loop if predicate returns `true`.
+     * @param nextMiddlewares Middlewares that will run if predicate returns `false`.
+     */
+    while(
+        predicate: MaybeArray<(context: Context) => boolean>,
+        loopMiddlewares: MaybeArray<MiddlewareLike<Context>>,
+        ...nextMiddlewares: MaybeArray<MiddlewareLike<Context>>[]
+    ): Composed<Context>;
+
+    /**
+     * Composes passed middlewares and forwards the last current middleware to
+     * the first passed one with an adapter attached.
+     * Returns a composed passed middleware.
+     *
+     * ```ts
+     * numberMiddleware.pass((n: number) => n.toString(), stringMiddleware);
+     * ```
+     *
+     * @param adapter Function that transforms current context to compatible.
+     * @param middlewares List of middlewares to compose and attach.
+     */
+    pass<ReceiverContext>(
+        adapter: (context: Context) => ReceiverContext,
+        ...middlewares: MaybeArray<MiddlewareLike<ReceiverContext>>[]
+    ): Composed<ReceiverContext>;
+
+    /**
+     * Composes passed middlewares and forwards the last current middleware to
+     * the queue gate. Each call will be processed after the previous one is executed,
+     * depending on the number of parallel executions.
+     * Returns a composed passed middleware.
+     *
+     * ```ts
+     * composed.queue(5, worker).use(next);
+     * // each 5 requests will be handled in parallel,
+     * // next will be executed after each request
+     * ```
+     *
+     * @param inParallel Number of parallel executions.
+     * @param middlewares List of middlewares that will be composed as worker.
+     */
+    queue(
+        inParallel: number,
+        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
+    ): Composed<Context>;
+
+    /**
+     * Composes passed middlewares and forwards the last current middleware
+     * to queue date. Each call will be processed within the specified time and
+     * the next call will wait for this time before being executed. This method
+     * is useful for rate limiting.
+     *
+     * ```ts
+     * composed.throttle(1000 / 3, worker).use(next);
+     * // each request will be handled within 333 milliseconds,
+     * // next will be executed after each request
+     * ```
+     *
+     * @param minTime Time during which one processing should take place.
+     * @param middlewares List of middlewares that will be composed as worker.
+     */
+    throttle(
+        minTime: number,
+        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
+    ): Composed<Context>;
 }
 
 /**
  * Callable part of a composed middleware. It fires first effect to trigger
- * call chain, which may lead to successful execution or an exception.
- *
- * If you want to run composed middleware explicitly, try `execute`.
+ * call chain.
  */
-export type ExecuteFunction<Context> = (context: Context) => Promise<Context>;
+export type ExecuteFunction<Context> = (context: Context) => void;
 
 /**
  * Middlewares that was composed.
@@ -470,34 +615,25 @@ export function pass<Context>(): MiddlewareEffect<Context> {
  * Finds relevant context in `result` and `params` fields
  * of effect's `done` event value.
  *
- * @param effectDone
+ * @param effectDoneData Data passed from the effect middleware `done` event.
  * @returns Extracted context.
  */
-function extractContext<Context>(effectDone: MiddlewareEffectDone<Context>) {
-    return effectDone.result || effectDone.params;
+function extractContext<Context>(
+    effectDoneData: MiddlewareEffectDoneData<Context>,
+) {
+    return effectDoneData.result || effectDoneData.params;
 }
 
 /**
- * Executes middleware chain by firing first effect and intercepting the last one.
- * Used as callable part of a composed middleware.
+ * Derives new event that transmits extracted context from effect's `done` event.
  *
- * @param first Effect to call.
- * @param last Effect to intercept.
- * @param context Context to call first effect with.
- * @returns Final context or an exception.
+ * @param effectDone Effect's `done` event.
+ * @returns Derived event.
  */
-export function execute<Context>(
-    first: MiddlewareEffect<Context>,
-    last: MiddlewareEffect<Context>,
-    context: Context,
+function mapContextExtractor<Context>(
+    effectDone: Event<MiddlewareEffectDoneData<Context>>,
 ) {
-    return new Promise<Context>((resolve) => {
-        watchOnSpot(last.finally, (result) => {
-            if (result.status === "fail") throw result.error;
-            resolve(extractContext(result));
-        });
-        first(context);
-    });
+    return effectDone.map(extractContext) as Event<Context>;
 }
 
 /**
@@ -517,43 +653,6 @@ function isComposed<Context>(
         "__composed" in middleware &&
         Object.is(middleware.__composed, __composed)
     );
-}
-
-/**
- * Produces forwarding sampling of two middlewares.
- *
- * @param from Middleware to forward from.
- * @param to Middleware to forward to.
- */
-function linkEffects<Context>(
-    from: MiddlewareEffect<Context>,
-    to: MiddlewareEffect<Context>,
-) {
-    sample({
-        clock: from.done,
-        fn: extractContext<Context>,
-        target: to,
-    });
-
-    return to;
-}
-
-/**
- * Produces forwarding sampling for each middleware
- * (that may be composed or just an effect) pair respectively.
- *
- * @param middlewares Effects or composed middlewares.
- */
-function concatEffectOrComposed<Context>(
-    ...middlewares: EffectOrComposed<Context>[]
-) {
-    middlewares.reduce((from, to) =>
-        linkEffects(
-            isComposed(from) ? from.last : from,
-            isComposed(to) ? to.first : to,
-        ),
-    );
-    return middlewares;
 }
 
 /**
@@ -584,6 +683,31 @@ function toEffectOrComposed<Context>(middleware: MiddlewareLike<Context>) {
     return isComposed(middleware) ? middleware : toEffect(middleware);
 }
 
+function createQueueStore<Context>(
+    queued: Event<Context> | Effect<any, Context>,
+    executes: Event<Context> | Effect<Context, any>,
+) {
+    return createStore<Context[]>([])
+        .on(queued, (state, context) => [...state, context])
+        .on(executes, (state, context) =>
+            state.filter((e) => !Object.is(e, context)),
+        );
+}
+
+function sampleQueueConsumption<Context>(
+    $queue: StoreWritable<Context[]>,
+    consumeOn: Event<Context>,
+    consumer: Effect<Context, any>,
+) {
+    return sample({
+        clock: consumeOn,
+        source: $queue,
+        filter: (inQueue) => inQueue.length > 0,
+        fn: (inQueue) => inQueue[inQueue.length - 1],
+        target: consumer,
+    });
+}
+
 /**
  * Creates an executable chain from a list of middlewares, proving an API for
  * its subsequent extension and binding.
@@ -606,76 +730,145 @@ function toEffectOrComposed<Context>(middleware: MiddlewareLike<Context>) {
 export function compose<Context>(
     ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
 ): Composed<Context> {
+    /**
+     * Turning functions into effects:
+     */
+
     let effectOrComposedList: EffectOrComposed<Context>[] =
         middlewares.length === 0
             ? [pass()]
-            : concatEffectOrComposed(
-                  ...flatten(middlewares).map(toEffectOrComposed),
-              );
+            : flatten(middlewares).map(toEffectOrComposed);
+
+    /**
+     * Concatenating each middleware:
+     */
+
+    effectOrComposedList.reduce((from, to) =>
+        forwardInternal(
+            isComposed(from) ? from.last : from,
+            isComposed(to) ? to.first : to,
+        ),
+    );
 
     let first = extractFirst(effectOrComposedList[0]);
     let last = extractLast(
         effectOrComposedList.at(-1) as EffectOrComposed<Context>,
     );
 
+    /**
+     * Wiring `step` event that fires on each middleware execution:
+     */
+
     const step = createEvent<Context>();
     effectOrComposedList.forEach((middleware) =>
         isComposed(middleware)
             ? middleware.intercept(step)
             : sample({
-                  clock: middleware.done,
-                  fn: extractContext<Context>,
+                  clock: mapContextExtractor(middleware.done),
                   target: step,
               }),
     );
 
-    const fail = createEvent<MiddlewareEffectFail<Context, any>>();
+    /**
+     * Wiring `failed` event that fires on each middleware exception:
+     */
+
+    const failed = createEvent<MiddlewareEffectFail<Context, any>>();
     effectOrComposedList.forEach((middleware) =>
         isComposed(middleware)
-            ? middleware.catch(fail)
+            ? middleware.catch(failed)
             : sample({
                   clock: middleware.fail,
-                  target: fail,
+                  target: failed,
               }),
     );
 
-    function selfExecute(context: Context) {
-        return execute(first, last, context);
+    /**
+     * Defining execution/termination logic:
+     */
+
+    const $isTerminated = createStore(false);
+
+    const terminated = createEvent();
+    $isTerminated.on(terminated, () => true);
+
+    const executed = createEvent<Context>();
+    $isTerminated.on(executed, () => false);
+    sample({
+        clock: executed,
+        target: first,
+    });
+
+    function shouldExecute() {
+        return !$isTerminated.getState();
     }
 
+    /**
+     * Callable part of current composed middleware.
+     */
+    function fn(context: Context) {
+        executed(context);
+    }
+
+    /**
+     * Creates instance of current composed middleware.
+     */
     function wrap(instance: ComposedApi<Context>) {
-        return Object.assign(selfExecute, instance);
+        return Object.assign(fn, instance);
     }
 
-    function forward(
-        middlewares: MaybeArray<MiddlewareLike<Context>>[],
-        shouldExtend = false,
+    /**
+     * Creates sampling between two effects
+     * in aware of current composed middleware.
+     */
+    function forwardInternal(
+        from: MiddlewareEffect<Context>,
+        to: MiddlewareEffect<Context>,
+        predicate?: MaybeArray<(context: Context) => boolean>,
     ) {
-        const next = compose(...middlewares);
-        linkEffects(last, next.first);
-        if (shouldExtend) last = next.last;
+        const filter = composeFilter(shouldExecute, predicate || []);
+
+        sample({
+            clock: mapContextExtractor(from.done),
+            filter,
+            target: to,
+        });
+
+        return to;
+    }
+
+    /**
+     * Wires some composed middleware's events to the current.
+     */
+    function propagate(next: Composed<Context>) {
         next.intercept(step);
+        next.catch(failed);
 
         return next;
     }
 
-    function forwardWithFilter(
-        predicate: MaybeArray<(context: Context) => boolean>,
-        middlewares: MaybeArray<MiddlewareLike<Context>>[],
-        shouldExtend = false,
+    /**
+     * Composes middlewares in aware of current composed middleware.
+     */
+    function composeInternal(
+        ...middlewares: MaybeArray<MiddlewareLike<Context>>[]
     ) {
-        const next = compose(...middlewares);
+        return propagate(compose(...middlewares));
+    }
 
-        const filter = composeFilter(predicate);
-        sample({
-            clock: last.done,
-            filter: (done) => filter(extractContext(done)),
-            fn: extractContext<Context>,
-            target: next.first,
-        });
+    /**
+     * Creates forwarding for a list of middlewares.
+     */
+    function concat(params: {
+        middlewares: MaybeArray<MiddlewareLike<Context>>[];
+        predicate?: MaybeArray<(context: Context) => boolean>;
+        shouldExtend?: boolean;
+    }) {
+        const next = compose(...params.middlewares);
 
-        if (shouldExtend) last = next.last;
-        next.intercept(step);
+        propagate(next);
+        forwardInternal(last, next.first, params.predicate);
+        if (params.shouldExtend) last = next.last;
 
         return next;
     }
@@ -692,14 +885,24 @@ export function compose<Context>(
         get step() {
             return step;
         },
-        get fail() {
-            return fail;
+        get failed() {
+            return failed;
         },
         get passed() {
-            return last.map(params => params);
+            return last.map((params) => params);
         },
         get ended() {
             return last.done.map(extractContext);
+        },
+
+        get $isTerminated() {
+            return $isTerminated;
+        },
+        get terminated() {
+            return terminated;
+        },
+        get executed() {
+            return executed;
         },
 
         use(...middlewares) {
@@ -714,11 +917,15 @@ export function compose<Context>(
                 (middleware) => !isPreset(middleware),
             ) as MiddlewareLike<Context>[];
 
-            return forward(rest, true);
+            return concat({ middlewares: rest, shouldExtend: true });
         },
 
         filter(predicate, ...middlewares) {
-            return forwardWithFilter(predicate, middlewares, true);
+            return concat({
+                predicate,
+                middlewares,
+                shouldExtend: true,
+            });
         },
 
         forEach(items, factory) {
@@ -762,7 +969,7 @@ export function compose<Context>(
                 ...middlewares,
             );
             sample({
-                clock: this.fail,
+                clock: this.failed,
                 target: next.first,
             });
 
@@ -772,24 +979,22 @@ export function compose<Context>(
         apply(...presets) {
             return (
                 (presets
-                    .map((preset) => preset(wrap(this)))
+                    .map((preset) => preset(wrap(this)) || wrap(this))
                     .at(-1) as Composed<Context>) || wrap(this)
             );
         },
 
         fork(...middlewares) {
-            return forward(middlewares);
+            return concat({ middlewares });
         },
 
         forkFilter(predicate, ...middlewares) {
-            return forwardWithFilter(predicate, middlewares);
+            return concat({ predicate, middlewares });
         },
 
         branch(predicate, matchMiddlewares, mismatchMiddlewares) {
-            const match = compose(matchMiddlewares);
-            const mismatch = compose(mismatchMiddlewares);
-            match.intercept(this.step);
-            mismatch.intercept(this.step);
+            const match = composeInternal(matchMiddlewares);
+            const mismatch = composeInternal(mismatchMiddlewares);
 
             const filter = composeFilter(predicate);
 
@@ -799,15 +1004,13 @@ export function compose<Context>(
         },
 
         split(predicate, matchMiddlewares, mismatchMiddlewares) {
-            const match = compose(matchMiddlewares);
-            const mismatch = compose(mismatchMiddlewares);
-            match.intercept(this.step);
-            mismatch.intercept(this.step);
+            const match = composeInternal(matchMiddlewares);
+            const mismatch = composeInternal(mismatchMiddlewares);
 
             const prependMiddlewareContextResolver = <Context>(
                 effect: MiddlewareEffect<Context>,
             ) =>
-                effect.prepend((done: MiddlewareEffectDone<Context>) =>
+                effect.prepend((done: MiddlewareEffectDoneData<Context>) =>
                     extractContext(done),
                 );
 
@@ -816,18 +1019,97 @@ export function compose<Context>(
                 mismatch.first,
             );
 
-            const filter = composeFilter(predicate);
+            const filter = composeFilter(shouldExecute, predicate);
 
             split({
                 clock: this.last.done,
                 source: this.last.done,
-                match: (done: MiddlewareEffectDone<Context>) =>
+                match: (done: MiddlewareEffectDoneData<Context>) =>
                     filter(extractContext(done)) ? "match" : "mismatch",
                 cases: {
                     match: matchTarget,
                     mismatch: mismatchTarget,
                 },
             });
+        },
+
+        while(predicate, loopMiddlewares, ...nextMiddlewares) {
+            const filter = composeFilter(predicate);
+            const loop = composeInternal(loopMiddlewares, this.last);
+            const next = composeInternal(...nextMiddlewares);
+
+            this.split(filter, loop, next);
+
+            return next;
+        },
+
+        pass(adapter, ...middlewares) {
+            const next = compose(...middlewares);
+
+            sample({
+                clock: mapContextExtractor(this.last.done),
+                filter: shouldExecute,
+                fn: adapter,
+                target: next.first,
+            });
+
+            return next;
+        },
+
+        queue(inParallel, ...middlewares) {
+            const worker = composeInternal(...middlewares);
+
+            const queued = mapContextExtractor(this.last.done);
+            const executes = worker.first;
+            const executed = mapContextExtractor(worker.last.done);
+
+            const $inQueue = createQueueStore<Context>(queued, executes);
+
+            const $inExecution = createStore(0)
+                .on(executes, (state) => state + 1)
+                .on(executed, (state) => state - 1);
+
+            sampleQueueConsumption($inQueue, executed, executes);
+
+            return this.filter(
+                () => $inExecution.getState() < inParallel,
+                worker,
+            );
+        },
+
+        throttle(minTime, ...middlewares) {
+            const worker = composeInternal(...middlewares);
+
+            const queued = mapContextExtractor(this.last.done);
+            const executes = worker.first;
+            const freed = createEvent<Context>();
+
+            const $inQueue = createQueueStore<Context>(queued, executes);
+
+            const $currentlyExecutes = createStore(false)
+                .on(executes, () => true)
+                .on(freed, () => false);
+
+            const delayFx = createEffect(
+                (context: Context) =>
+                    new Promise<Context>((resolve) =>
+                        setTimeout(() => resolve(context), minTime),
+                    ),
+            );
+
+            sample({
+                clock: executes,
+                target: delayFx,
+            });
+
+            sample({
+                clock: delayFx.doneData,
+                target: freed,
+            });
+
+            sampleQueueConsumption($inQueue, freed, executes);
+
+            return this.filter(() => !$currentlyExecutes.getState(), worker);
         },
     };
 

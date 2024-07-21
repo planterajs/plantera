@@ -1,5 +1,5 @@
 import { flatten } from "lodash";
-import { MaybeArray } from "../../types";
+import { MaybeArray } from "../types";
 
 /**
  * Combines multiple filter functions into a single filter function.
