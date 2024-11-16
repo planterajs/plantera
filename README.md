@@ -503,9 +503,9 @@ firing event because of its targeting properties.
   middleware of the current composed middleware system.
 - `.fail` - An event that fires when any of the current system's middleware throws
   an exception.
-- `.passed` - an alias event, derived for `last` property. It only fires when `last`
+- `.passed` - an alias event, derived from `last` property. It only fires when `last`
   effect is fired.
-- `.ends` - an alias event, derived for `last.done` property.
+- `.ends` - an alias event, derived from `last.done` property.
   It only fires when `last.done` effect is fired.
 
 ## Links
