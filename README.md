@@ -27,7 +27,7 @@
 
 ## Introduction
 
-Plantera implements the most convenient way to create routing for your server applications in a server-side JavaScript with event-driven approch. It uses an effector under the hood to achieve maximum reactivity and performance, while also allowing integration of existing codebases written in the effector.
+Plantera implements the most convenient way to create routing for your server applications in a server-side JavaScript with event-driven approach. It uses an effector under the hood to achieve maximum reactivity and performance, while also allowing integration of existing codebases written in the effector.
 
 ### Core concepts:
 - All handlers (or middlewares) are effects that can be interconnected and monitored by different parts of the system.
